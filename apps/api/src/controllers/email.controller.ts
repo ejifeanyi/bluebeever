@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import { createSuccessResponse, createErrorResponse } from '@crate/shared';
 import { ERROR_CODES } from '@crate/shared';
 import { AuthenticatedRequest } from '@/middleware/auth';
-import { EmailService } from '@/services/email.serice';
+import { EmailSyncService } from '@/services/email-sync.service';
+import { EmailQueryService } from '@/services/email-query.service';
 
 export class EmailController {
   static async syncEmails(req: AuthenticatedRequest, res: Response) {
@@ -21,9 +22,9 @@ export class EmailController {
         );
       }
 
-      const result = await EmailService.syncUserEmails(req.user.userId, maxResults);
+      const result = await EmailSyncService.initiateSync(req.user.userId, maxResults);
       
-      res.json(createSuccessResponse(result, 'Email sync completed'));
+      res.json(createSuccessResponse(result, 'Email sync initiated'));
     } catch (error) {
       console.error('Email sync error:', error);
       
@@ -42,7 +43,7 @@ export class EmailController {
       }
 
       res.status(500).json(
-        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to sync emails')
+        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to initiate email sync')
       );
     }
   }
@@ -58,12 +59,20 @@ export class EmailController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
       const search = req.query.search as string;
+      
+      const filters = {
+        isRead: req.query.isRead ? req.query.isRead === 'true' : undefined,
+        dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+        dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
+        labels: req.query.labels ? (req.query.labels as string).split(',') : undefined,
+      };
 
-      const result = await EmailService.getUserEmails(
+      const result = await EmailQueryService.getUserEmails(
         req.user.userId,
         page,
         limit,
-        search
+        search,
+        filters
       );
 
       res.json(createSuccessResponse(result));
@@ -85,7 +94,7 @@ export class EmailController {
 
       const { id } = req.params;
       
-      const email = await EmailService.getEmailById(req.user.userId, id);
+      const email = await EmailQueryService.getEmailById(req.user.userId, id);
       
       if (!email) {
         return res.status(404).json(
@@ -112,7 +121,7 @@ export class EmailController {
 
       const { id } = req.params;
       
-      const result = await EmailService.markAsRead(req.user.userId, id);
+      const result = await EmailQueryService.markAsRead(req.user.userId, id);
       
       if (result.count === 0) {
         return res.status(404).json(
@@ -125,6 +134,25 @@ export class EmailController {
       console.error('Mark email as read error:', error);
       res.status(500).json(
         createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to mark email as read')
+      );
+    }
+  }
+
+  static async getEmailStats(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(
+          createErrorResponse(ERROR_CODES.UNAUTHORIZED, 'User not authenticated')
+        );
+      }
+
+      const stats = await EmailQueryService.getUserEmailStats(req.user.userId);
+      
+      res.json(createSuccessResponse(stats));
+    } catch (error) {
+      console.error('Get email stats error:', error);
+      res.status(500).json(
+        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to fetch email stats')
       );
     }
   }
