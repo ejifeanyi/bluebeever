@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  picture        String?
+  googleId       String    @unique
+  refreshToken   String?
+  accessToken    String?
+  tokenExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  emails    Email[]
+  syncState SyncState?
+
+  @@map("users")
+}
+
+model Email {
+  id           String   @id @default(cuid())
+  userId       String
+  threadId     String
+  messageId    String   @unique
+  subject      String
+  from         String
+  to           String[]
+  cc           String[]
+  bcc          String[]
+  body         String
+  snippet      String
+  isRead       Boolean  @default(false)
+  date         DateTime
+  labels       String[]
+  attachments  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([threadId])
+  @@index([date])
+  @@index([messageId])
+  @@map("emails")
+}
+
+model SyncState {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  lastSyncAt       DateTime?
+  nextPageToken    String?
+  historyId        String?
+  isInitialSyncing Boolean   @default(true)
+  syncInProgress   Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sync_states")
+}
