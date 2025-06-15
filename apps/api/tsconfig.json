@@ -14,9 +14,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@/shared": ["../../packages/shared/src"]
-    },
+    }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test-worker.ts"],
   "exclude": ["node_modules", "dist"],
   "references": [
     {

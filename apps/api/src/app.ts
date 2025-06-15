@@ -3,8 +3,11 @@ import cors from 'cors';
 import { routes } from '@/routes';
 import { errorHandler } from '@/middleware/error';
 import { env } from '@/config/env';
-import './workers/email-sync.worker';
-import './workers/email-processing.worker';
+
+if (process.env.LOAD_WORKERS === 'true') {
+  import('./workers/email-sync.worker');
+  import('./workers/email-processing.worker');
+}
 
 export const createApp = () => {
   const app = express();

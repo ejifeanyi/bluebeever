@@ -14,6 +14,9 @@ const envSchema = z.object({
   PORT: z.string().transform(Number).default('4000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  REDIS_HOST: z.string().min(1),
+  REDIS_PORT: z.string().transform(Number),
+  REDIS_PASSWORD: z.string().min(1),
 });
 
 const parseEnv = () => {
@@ -21,6 +24,7 @@ const parseEnv = () => {
     return envSchema.parse(process.env);
   } catch (error) {
     console.error('❌ Invalid environment variables:', error);
+    console.error('Missing or invalid environment variables. Please check your .env file.');
     process.exit(1);
   }
 };

@@ -39,6 +39,8 @@ export class EmailSyncService {
     const { userId, maxResults = 100, pageToken, isInitialSync } = job;
 
     try {
+      await this.getSyncState(userId);
+      
       await AuthService.refreshUserTokens(userId);
       const user = await UserService.findById(userId);
       
@@ -86,6 +88,8 @@ export class EmailSyncService {
       };
 
     } catch (error) {
+      // Ensure sync state exists before updating
+      await this.getSyncState(userId);
       await this.updateSyncState(userId, { syncInProgress: false });
       throw error;
     }
@@ -168,9 +172,16 @@ export class EmailSyncService {
   }
 
   private static async updateSyncState(userId: string, data: any) {
-    return prisma.syncState.update({
+    // Use upsert to handle cases where the record might not exist
+    return prisma.syncState.upsert({
       where: { userId },
-      data,
+      update: data,
+      create: {
+        userId,
+        isInitialSyncing: true,
+        syncInProgress: false,
+        ...data,
+      },
     });
   }
 
