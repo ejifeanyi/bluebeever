@@ -4,13 +4,7 @@ import { getGmailClient } from '@/config/google';
 import { UserService } from './user.service';
 import { AuthService } from './auth.service';
 import { emailSyncQueue, emailProcessingQueue } from '@/config/queue';
-import { EmailSyncJob, ParsedEmail } from '@crate/shared';
-
-enum SyncStrategy {
-  QUICK = 'quick',
-  FULL = 'full',
-  INCREMENTAL = 'incremental'
-}
+import { EmailSyncJob, ParsedEmail, SyncStrategy } from '@crate/shared';
 
 export class EmailSyncService {
   static async initiateSync(userId: string, strategy: SyncStrategy = SyncStrategy.QUICK) {
@@ -24,19 +18,25 @@ export class EmailSyncService {
       throw new Error('Sync already in progress for this user');
     }
 
-    await this.updateSyncState(userId, { syncInProgress: true });
+    await this.updateSyncState(userId, { 
+      syncInProgress: true,
+      nextPageToken: strategy === SyncStrategy.FULL ? null : syncState.nextPageToken
+    });
 
     const config = this.getSyncConfig(strategy, syncState.isInitialSyncing);
     
     await emailSyncQueue.add('sync-user-emails', {
       userId,
-      ...config,
+      maxResults: config.maxResults,
       strategy,
-      pageToken: syncState.nextPageToken,
+      pageToken: strategy === SyncStrategy.FULL ? null : syncState.nextPageToken,
       isInitialSync: syncState.isInitialSyncing,
     } as EmailSyncJob, {
       priority: config.priority,
-      delay: 0,
+      delay: config.delay,
+      jobId: `sync-${userId}-${strategy}-${Date.now()}`,
+      removeOnComplete: 10,
+      removeOnFail: 5,
     });
 
     return { 
@@ -48,6 +48,11 @@ export class EmailSyncService {
 
   static async processEmailSync(job: EmailSyncJob) {
     const { userId, maxResults = 100, pageToken, isInitialSync, strategy } = job;
+    
+    if (!strategy) {
+      console.warn('Legacy job without strategy detected, skipping');
+      return { processedCount: 0, hasMore: false, strategy: 'unknown' };
+    }
 
     try {
       await AuthService.refreshUserTokens(userId);
@@ -58,7 +63,9 @@ export class EmailSyncService {
       }
 
       const gmail = getGmailClient(user.accessToken);
-      const query = this.buildGmailQuery(strategy as SyncStrategy);
+      const query = this.buildGmailQuery(strategy);
+      
+      console.log(`Processing ${strategy} sync for user ${userId} with query: "${query}"`);
       
       const response = await gmail.users.messages.list({
         userId: 'me',
@@ -71,7 +78,7 @@ export class EmailSyncService {
       const processedCount = await this.processBatch(messages, gmail, userId);
 
       const hasMore = !!response.data.nextPageToken;
-      const shouldContinue = this.shouldContinueSync(strategy as SyncStrategy, hasMore, isInitialSync);
+      const shouldContinue = this.shouldContinueSync(strategy, hasMore, isInitialSync);
 
       await this.updateSyncState(userId, {
         lastSyncAt: new Date(),
@@ -81,7 +88,7 @@ export class EmailSyncService {
       });
 
       if (shouldContinue && response.data.nextPageToken) {
-        const nextConfig = this.getSyncConfig(strategy as SyncStrategy, true);
+        const nextConfig = this.getSyncConfig(strategy, true);
         await emailSyncQueue.add('sync-user-emails', {
           userId,
           maxResults: nextConfig.maxResults,
@@ -94,6 +101,8 @@ export class EmailSyncService {
         });
       }
 
+      console.log(`✅ ${strategy} sync completed: ${processedCount} emails processed, hasMore: ${hasMore}`);
+
       return {
         processedCount,
         hasMore,
@@ -101,7 +110,7 @@ export class EmailSyncService {
       };
 
     } catch (error) {
-      await this.getSyncState(userId);
+      console.error(`❌ Sync error for user ${userId}:`, error);
       await this.updateSyncState(userId, { syncInProgress: false });
       throw error;
     }
@@ -126,7 +135,7 @@ export class EmailSyncService {
       },
     };
 
-    return configs[strategy];
+    return configs[strategy] || configs[SyncStrategy.QUICK];
   }
 
   private static buildGmailQuery(strategy: SyncStrategy): string {
@@ -136,7 +145,7 @@ export class EmailSyncService {
       [SyncStrategy.INCREMENTAL]: 'newer_than:1d',
     };
 
-    return queries[strategy];
+    return queries[strategy] || '';
   }
 
   private static shouldContinueSync(strategy: SyncStrategy, hasMore: boolean, isInitialSync: boolean): boolean {
@@ -144,9 +153,9 @@ export class EmailSyncService {
     
     switch (strategy) {
       case SyncStrategy.QUICK:
-        return false;
+        return true;
       case SyncStrategy.INCREMENTAL:
-        return false;
+        return true;
       case SyncStrategy.FULL:
         return isInitialSync;
       default:
@@ -166,21 +175,33 @@ export class EmailSyncService {
     );
 
     const newMessages = messages.filter(m => m.id && !existingMessageIds.has(m.id));
-    if (newMessages.length === 0) return 0;
+    if (newMessages.length === 0) {
+      console.log('No new messages to process');
+      return 0;
+    }
+
+    console.log(`Processing ${newMessages.length} new messages out of ${messages.length}`);
 
     const emailPromises = newMessages.map(async (message) => {
-      const fullMessage = await gmail.users.messages.get({
-        userId: 'me',
-        id: message.id!,
-        format: 'full',
-      });
-      return this.parseGmailMessage(fullMessage.data, userId);
+      try {
+        const fullMessage = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id!,
+          format: 'full',
+        });
+        return this.parseGmailMessage(fullMessage.data, userId);
+      } catch (error) {
+        console.error(`Error fetching message ${message.id}:`, error);
+        return null;
+      }
     });
 
     const parsedEmails = (await Promise.all(emailPromises)).filter(Boolean) as ParsedEmail[];
     const savedEmails = await this.batchInsertEmails(parsedEmails);
     
-    await this.queueEmailProcessing(savedEmails);
+    if (savedEmails.length > 0) {
+      await this.queueEmailProcessing(savedEmails);
+    }
     
     return savedEmails.length;
   }
@@ -197,9 +218,37 @@ export class EmailSyncService {
   private static async batchInsertEmails(emails: ParsedEmail[]) {
     if (emails.length === 0) return [];
     
-    return prisma.$transaction(
-      emails.map(email => prisma.email.create({ data: email }))
-    );
+    try {
+      return await prisma.$transaction(
+        emails.map(email => prisma.email.create({ 
+          data: {
+            ...email,
+            id: email.id || crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+        }))
+      );
+    } catch (error) {
+      console.error('Batch insert error:', error);
+      const results = [];
+      for (const email of emails) {
+        try {
+          const saved = await prisma.email.create({ 
+            data: {
+              ...email,
+              id: email.id || crypto.randomUUID(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          });
+          results.push(saved);
+        } catch (individualError) {
+          console.error(`Failed to insert email ${email.messageId}:`, individualError);
+        }
+      }
+      return results;
+    }
   }
 
   private static async queueEmailProcessing(emails: any[]) {
@@ -213,6 +262,8 @@ export class EmailSyncService {
       opts: {
         priority: 3,
         delay: 0,
+        removeOnComplete: 10,
+        removeOnFail: 5,
       },
     }));
 
@@ -265,7 +316,7 @@ export class EmailSyncService {
 
     return {
       userId,
-      id: message.id,
+      id: crypto.randomUUID(),
       threadId: message.threadId || message.id,
       messageId: message.id,
       subject,
@@ -340,5 +391,11 @@ export class EmailSyncService {
 
     processPart(payload);
     return attachments;
+  }
+
+  static async cleanupOldJobs() {
+    await emailSyncQueue.clean(0, 'completed');
+    await emailSyncQueue.clean(0, 'failed');
+    console.log('✅ Cleaned up old sync jobs');
   }
 }
