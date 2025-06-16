@@ -1,20 +1,22 @@
 import { prisma } from '@/config/database';
 
+interface EmailFilters {
+  isRead?: boolean;
+  dateFrom?: Date;
+  dateTo?: Date;
+  labels?: string[];
+}
+
 export class EmailQueryService {
   static async getUserEmails(
     userId: string,
-    page = 1,
-    limit = 50,
+    page: number = 1,
+    limit: number = 50,
     search?: string,
-    filters?: {
-      isRead?: boolean;
-      hasAttachments?: boolean;
-      dateFrom?: Date;
-      dateTo?: Date;
-      labels?: string[];
-    }
+    filters?: EmailFilters
   ) {
-    const offset = (page - 1) * limit;
+    const skip = (page - 1) * limit;
+    
     const where: any = { userId };
 
     if (search) {
@@ -25,39 +27,38 @@ export class EmailQueryService {
       ];
     }
 
-    if (filters) {
-      if (filters.isRead !== undefined) {
-        where.isRead = filters.isRead;
-      }
+    if (filters?.isRead !== undefined) {
+      where.isRead = filters.isRead;
+    }
 
-      if (filters.dateFrom || filters.dateTo) {
-        where.date = {};
-        if (filters.dateFrom) where.date.gte = filters.dateFrom;
-        if (filters.dateTo) where.date.lte = filters.dateTo;
-      }
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.date = {};
+      if (filters.dateFrom) where.date.gte = filters.dateFrom;
+      if (filters.dateTo) where.date.lte = filters.dateTo;
+    }
 
-      if (filters.labels && filters.labels.length > 0) {
-        where.labels = {
-          hasSome: filters.labels,
-        };
-      }
+    if (filters?.labels?.length) {
+      where.labels = { hasSome: filters.labels };
     }
 
     const [emails, total] = await Promise.all([
       prisma.email.findMany({
         where,
         orderBy: { date: 'desc' },
-        skip: offset,
+        skip,
         take: limit,
         select: {
           id: true,
+          threadId: true,
+          messageId: true,
           subject: true,
           from: true,
+          to: true,
           snippet: true,
-          date: true,
           isRead: true,
+          date: true,
           labels: true,
-          attachments: true,
+          hasAttachments: true,
         },
       }),
       prisma.email.count({ where }),
@@ -74,41 +75,60 @@ export class EmailQueryService {
     };
   }
 
-  static async getEmailById(userId: string, emailId: string) {
+  static async getEmailById(userId: string, id: string) {
     return prisma.email.findFirst({
-      where: {
-        id: emailId,
-        userId,
-      },
+      where: { userId, id },
     });
   }
 
-  static async markAsRead(userId: string, emailId: string) {
+  static async markAsRead(userId: string, id: string) {
     return prisma.email.updateMany({
-      where: {
-        id: emailId,
-        userId,
-      },
-      data: {
-        isRead: true,
-      },
+      where: { userId, id },
+      data: { isRead: true },
     });
   }
 
   static async getUserEmailStats(userId: string) {
-    const [total, unread, today] = await Promise.all([
+    const [total, unread, withAttachments, syncState] = await Promise.all([
       prisma.email.count({ where: { userId } }),
       prisma.email.count({ where: { userId, isRead: false } }),
-      prisma.email.count({
-        where: {
-          userId,
-          date: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          },
-        },
-      }),
+      prisma.email.count({ where: { userId, hasAttachments: true } }),
+      prisma.syncState.findUnique({ where: { userId } }),
     ]);
 
-    return { total, unread, today };
+    const lastSyncAt = syncState?.lastSyncAt;
+    const syncInProgress = syncState?.syncInProgress || false;
+
+    return {
+      total,
+      unread,
+      withAttachments,
+      lastSyncAt,
+      syncInProgress,
+    };
+  }
+
+  static async getSyncStatus(userId: string) {
+    const syncState = await prisma.syncState.findUnique({
+      where: { userId },
+    });
+
+    if (!syncState) {
+      return {
+        syncInProgress: false,
+        isInitialSyncing: true,
+        lastSyncAt: null,
+        emailCount: 0,
+      };
+    }
+
+    const emailCount = await prisma.email.count({ where: { userId } });
+
+    return {
+      syncInProgress: syncState.syncInProgress,
+      isInitialSyncing: syncState.isInitialSyncing,
+      lastSyncAt: syncState.lastSyncAt,
+      emailCount,
+    };
   }
 }

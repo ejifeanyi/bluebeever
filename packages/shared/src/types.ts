@@ -68,11 +68,18 @@ export const ApiResponseSchema = z.object({
   message: z.string().optional(),
 });
 
+export enum SyncStrategy {
+  QUICK = 'quick',
+  FULL = 'full',
+  INCREMENTAL = 'incremental'
+}
+
 export const EmailSyncJobSchema = z.object({
   userId: z.string(),
   maxResults: z.number().optional(),
   pageToken: z.string().optional(),
   isInitialSync: z.boolean().optional().default(false),
+  strategy: z.nativeEnum(SyncStrategy),
 });
 
 export const EmailProcessingJobSchema = z.object({
@@ -102,7 +109,7 @@ export const EmailProcessingJobSchema = z.object({
     createdAt: z.date(),
     updatedAt: z.date(),
   }).optional()
-})
+});
 
 export const ParsedEmailSchema = z.object({
   id: z.string(),
@@ -127,9 +134,11 @@ export const ParsedEmailSchema = z.object({
   })).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
-})
+});
 
 
+
+export type SyncStrategyType = 'quick' | 'full' | 'incremental';
 export type User = z.infer<typeof UserSchema>;
 export type CreateUser = z.infer<typeof CreateUserSchema>;
 export type AuthToken = z.infer<typeof AuthTokenSchema>;

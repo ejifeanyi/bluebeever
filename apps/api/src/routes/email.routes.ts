@@ -6,20 +6,14 @@ const router = Router();
 
 router.use(authenticate);
 
-router.post('/sync', (req, res) => {
-  EmailController.syncEmails(req, res);
-});
+router.post('/sync/quick', EmailController.quickSync);
+router.post('/sync/full', EmailController.fullSync);
+router.post('/sync/incremental', EmailController.incrementalSync);
+router.get('/sync/status', EmailController.getSyncStatus);
 
-router.patch('/:id/read', (req, res) => {
-  EmailController.markEmailAsRead(req, res);
-});
-
-router.get('/:id', (req, res) => {
-  EmailController.getEmail(req, res);
-});
-
-router.get('/', (req, res) => {
-  EmailController.getEmails(req, res);
-});
+router.patch('/:id/read', EmailController.markEmailAsRead);
+router.get('/stats', EmailController.getEmailStats);
+router.get('/:id', EmailController.getEmail);
+router.get('/', EmailController.getEmails);
 
 export { router as emailRoutes };
