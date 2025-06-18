@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  email-ai:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/emaildb
+      - REDIS_URL=redis://redis:6379
+      - API_KEY=your-secure-api-key
+      - NODE_SERVICE_URL=http://node-app:4000
+    depends_on:
+      - postgres
+      - redis
+    
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: emaildb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+  redis:
+    image: redis:7-alpine
+    
+volumes:
+  postgres_data:

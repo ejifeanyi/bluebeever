@@ -6,38 +6,74 @@ import { AuthService } from './auth.service';
 import { emailSyncQueue, emailProcessingQueue } from '@/config/queue';
 import { EmailSyncJob, ParsedEmail, SyncStrategy } from '@crate/shared';
 
+// Define local enum as fallback
+const LocalSyncStrategy = {
+  QUICK: 'quick',
+  FULL: 'full',
+  INCREMENTAL: 'incremental'
+} as const;
+
+type SyncStrategyType = typeof LocalSyncStrategy[keyof typeof LocalSyncStrategy];
+
 export class EmailSyncService {
-  static async initiateSync(userId: string, strategy: SyncStrategy = SyncStrategy.QUICK) {
+  static async initiateSync(userId: string, strategy: SyncStrategyType = 'quick') {
     const user = await UserService.findById(userId);
     if (!user?.accessToken) {
       throw new Error('User access token not found');
     }
 
     const syncState = await this.getSyncState(userId);
+    
+    // Add timeout check - if sync has been in progress for more than 30 minutes, reset it
+    const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    const now = new Date();
+    const lastUpdate = syncState.updatedAt || syncState.createdAt;
+    const timeSinceLastUpdate = now.getTime() - lastUpdate.getTime();
+    
+    if (syncState.syncInProgress && timeSinceLastUpdate > SYNC_TIMEOUT_MS) {
+      console.warn(`Sync timeout detected for user ${userId}, resetting sync state`);
+      await this.updateSyncState(userId, { 
+        syncInProgress: false,
+        isInitialSyncing: false
+      });
+      // Refresh sync state after reset
+      const refreshedState = await this.getSyncState(userId);
+      syncState.syncInProgress = refreshedState.syncInProgress;
+      syncState.isInitialSyncing = refreshedState.isInitialSyncing;
+    }
+    
     if (syncState.syncInProgress) {
       throw new Error('Sync already in progress for this user');
     }
 
     await this.updateSyncState(userId, { 
       syncInProgress: true,
-      nextPageToken: strategy === SyncStrategy.FULL ? null : syncState.nextPageToken
+      nextPageToken: strategy === 'full' ? null : syncState.nextPageToken
     });
 
     const config = this.getSyncConfig(strategy, syncState.isInitialSyncing);
     
-    await emailSyncQueue.add('sync-user-emails', {
-      userId,
-      maxResults: config.maxResults,
-      strategy,
-      pageToken: strategy === SyncStrategy.FULL ? null : syncState.nextPageToken,
-      isInitialSync: syncState.isInitialSyncing,
-    } as EmailSyncJob, {
-      priority: config.priority,
-      delay: config.delay,
-      jobId: `sync-${userId}-${strategy}-${Date.now()}`,
-      removeOnComplete: 10,
-      removeOnFail: 5,
-    });
+    try {
+      await emailSyncQueue.add('sync-user-emails', {
+        userId,
+        maxResults: config.maxResults,
+        strategy,
+        pageToken: strategy === 'full' ? null : syncState.nextPageToken,
+        isInitialSync: syncState.isInitialSyncing,
+      } as EmailSyncJob, {
+        priority: config.priority,
+        delay: config.delay,
+        jobId: `sync-${userId}-${strategy}-${Date.now()}`,
+        removeOnComplete: 10,
+        removeOnFail: 5,
+        // Add job timeout
+        timeout: 10 * 60 * 1000, // 10 minutes per job
+      });
+    } catch (error) {
+      // If adding job fails, reset sync state
+      await this.updateSyncState(userId, { syncInProgress: false });
+      throw error;
+    }
 
     return { 
       message: `${strategy} sync initiated`,
@@ -51,6 +87,8 @@ export class EmailSyncService {
     
     if (!strategy) {
       console.warn('Legacy job without strategy detected, skipping');
+      // Reset sync state for legacy jobs
+      await this.updateSyncState(userId, { syncInProgress: false });
       return { processedCount: 0, hasMore: false, strategy: 'unknown' };
     }
 
@@ -98,6 +136,7 @@ export class EmailSyncService {
         } as EmailSyncJob, {
           priority: nextConfig.priority,
           delay: nextConfig.delay,
+          timeout: 10 * 60 * 1000, // 10 minutes timeout
         });
       }
 
@@ -111,52 +150,103 @@ export class EmailSyncService {
 
     } catch (error) {
       console.error(`❌ Sync error for user ${userId}:`, error);
-      await this.updateSyncState(userId, { syncInProgress: false });
+      // Always reset sync state on error
+      await this.updateSyncState(userId, { 
+        syncInProgress: false,
+        isInitialSyncing: false 
+      });
       throw error;
     }
   }
 
-  private static getSyncConfig(strategy: SyncStrategy, isOngoing: boolean = false) {
+  // Add method to manually reset sync state (useful for debugging)
+  static async resetSyncState(userId: string) {
+    await this.updateSyncState(userId, {
+      syncInProgress: false,
+      isInitialSyncing: false,
+      nextPageToken: null
+    });
+    
+    console.log(`✅ Reset sync state for user ${userId}`);
+    return { message: 'Sync state reset successfully' };
+  }
+
+  // Add method to check for stuck syncs and reset them
+  static async cleanupStuckSyncs() {
+    const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    const cutoffTime = new Date(Date.now() - SYNC_TIMEOUT_MS);
+    
+    const stuckSyncs = await prisma.syncState.findMany({
+      where: {
+        syncInProgress: true,
+        updatedAt: {
+          lt: cutoffTime
+        }
+      }
+    });
+
+    if (stuckSyncs.length > 0) {
+      console.log(`Found ${stuckSyncs.length} stuck syncs, resetting...`);
+      
+      await prisma.syncState.updateMany({
+        where: {
+          id: {
+            in: stuckSyncs.map(s => s.id)
+          }
+        },
+        data: {
+          syncInProgress: false,
+          isInitialSyncing: false
+        }
+      });
+      
+      console.log(`✅ Reset ${stuckSyncs.length} stuck syncs`);
+    }
+    
+    return { resetCount: stuckSyncs.length };
+  }
+
+  private static getSyncConfig(strategy: SyncStrategyType, isOngoing: boolean = false) {
     const configs = {
-      [SyncStrategy.QUICK]: {
+      quick: {
         maxResults: 50,
         priority: 1,
         delay: 0,
       },
-      [SyncStrategy.FULL]: {
+      full: {
         maxResults: isOngoing ? 100 : 50,
         priority: isOngoing ? 5 : 3,
         delay: isOngoing ? 2000 : 500,
       },
-      [SyncStrategy.INCREMENTAL]: {
+      incremental: {
         maxResults: 25,
         priority: 2,
         delay: 0,
       },
     };
 
-    return configs[strategy] || configs[SyncStrategy.QUICK];
+    return configs[strategy] || configs.quick;
   }
 
-  private static buildGmailQuery(strategy: SyncStrategy): string {
+  private static buildGmailQuery(strategy: SyncStrategyType): string {
     const queries = {
-      [SyncStrategy.QUICK]: 'newer_than:7d',
-      [SyncStrategy.FULL]: '',
-      [SyncStrategy.INCREMENTAL]: 'newer_than:1d',
+      quick: 'newer_than:7d',
+      full: '',
+      incremental: 'newer_than:1d',
     };
 
     return queries[strategy] || '';
   }
 
-  private static shouldContinueSync(strategy: SyncStrategy, hasMore: boolean, isInitialSync: boolean): boolean {
+  private static shouldContinueSync(strategy: SyncStrategyType, hasMore: boolean, isInitialSync: boolean): boolean {
     if (!hasMore) return false;
     
     switch (strategy) {
-      case SyncStrategy.QUICK:
+      case 'quick':
         return true;
-      case SyncStrategy.INCREMENTAL:
+      case 'incremental':
         return true;
-      case SyncStrategy.FULL:
+      case 'full':
         return isInitialSync;
       default:
         return false;
@@ -285,12 +375,16 @@ export class EmailSyncService {
   private static async updateSyncState(userId: string, data: any) {
     return prisma.syncState.upsert({
       where: { userId },
-      update: data,
+      update: {
+        ...data,
+        updatedAt: new Date(), // Ensure updatedAt is always set
+      },
       create: {
         userId,
         isInitialSyncing: true,
         syncInProgress: false,
         ...data,
+        updatedAt: new Date(),
       },
     });
   }

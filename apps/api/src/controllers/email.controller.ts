@@ -4,6 +4,10 @@ import { AuthenticatedRequest } from '@/middleware/auth';
 import { EmailSyncService } from '@/services/email-sync.service';
 import { EmailQueryService } from '@/services/email-query.service';
 
+// Debug: Log SyncStrategy to see if it's imported correctly
+console.log('SyncStrategy imported:', SyncStrategy);
+console.log('SyncStrategy.QUICK:', SyncStrategy?.QUICK);
+
 export class EmailController {
   static async quickSync(req: AuthenticatedRequest, res: Response) {
     try {
@@ -13,11 +17,15 @@ export class EmailController {
         );
       }
 
-      const result = await EmailSyncService.initiateSync(req.user.userId, SyncStrategy.QUICK);
+      // Fallback to string literal if SyncStrategy enum is undefined
+      const syncStrategy = SyncStrategy?.QUICK || 'quick';
+      console.log('Using sync strategy:', syncStrategy);
+      
+      const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Quick sync initiated - recent emails loading'));
     } catch (error) {
       console.error('Quick sync error:', error);
-      return this.handleSyncError(error, res);
+      return EmailController.handleSyncError(error, res);
     }
   }
 
@@ -29,11 +37,15 @@ export class EmailController {
         );
       }
 
-      const result = await EmailSyncService.initiateSync(req.user.userId, SyncStrategy.FULL);
+      // Fallback to string literal if SyncStrategy enum is undefined
+      const syncStrategy = SyncStrategy?.FULL || 'full';
+      console.log('Using sync strategy:', syncStrategy);
+      
+      const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Full sync initiated - importing all emails in background'));
     } catch (error) {
       console.error('Full sync error:', error);
-      return this.handleSyncError(error, res);
+      return EmailController.handleSyncError(error, res);
     }
   }
 
@@ -45,11 +57,34 @@ export class EmailController {
         );
       }
 
-      const result = await EmailSyncService.initiateSync(req.user.userId, SyncStrategy.INCREMENTAL);
+      // Fallback to string literal if SyncStrategy enum is undefined
+      const syncStrategy = SyncStrategy?.INCREMENTAL || 'incremental';
+      console.log('Using sync strategy:', syncStrategy);
+      
+      const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Incremental sync initiated'));
     } catch (error) {
       console.error('Incremental sync error:', error);
-      return this.handleSyncError(error, res);
+      return EmailController.handleSyncError(error, res);
+    }
+  }
+
+  // Add reset sync endpoint for debugging
+  static async resetSync(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(
+          createErrorResponse(ERROR_CODES.UNAUTHORIZED, 'User not authenticated')
+        );
+      }
+
+      const result = await EmailSyncService.resetSyncState(req.user.userId);
+      res.json(createSuccessResponse(result, 'Sync state reset successfully'));
+    } catch (error) {
+      console.error('Reset sync error:', error);
+      res.status(500).json(
+        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to reset sync state')
+      );
     }
   }
 
