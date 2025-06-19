@@ -4,7 +4,6 @@ import { AuthenticatedRequest } from '@/middleware/auth';
 import { EmailSyncService } from '@/services/email-sync.service';
 import { EmailQueryService } from '@/services/email-query.service';
 
-// Debug: Log SyncStrategy to see if it's imported correctly
 console.log('SyncStrategy imported:', SyncStrategy);
 console.log('SyncStrategy.QUICK:', SyncStrategy?.QUICK);
 
@@ -17,7 +16,6 @@ export class EmailController {
         );
       }
 
-      // Fallback to string literal if SyncStrategy enum is undefined
       const syncStrategy = SyncStrategy?.QUICK || 'quick';
       console.log('Using sync strategy:', syncStrategy);
       
@@ -37,7 +35,6 @@ export class EmailController {
         );
       }
 
-      // Fallback to string literal if SyncStrategy enum is undefined
       const syncStrategy = SyncStrategy?.FULL || 'full';
       console.log('Using sync strategy:', syncStrategy);
       
@@ -57,7 +54,6 @@ export class EmailController {
         );
       }
 
-      // Fallback to string literal if SyncStrategy enum is undefined
       const syncStrategy = SyncStrategy?.INCREMENTAL || 'incremental';
       console.log('Using sync strategy:', syncStrategy);
       
@@ -69,7 +65,6 @@ export class EmailController {
     }
   }
 
-  // Add reset sync endpoint for debugging
   static async resetSync(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.user) {

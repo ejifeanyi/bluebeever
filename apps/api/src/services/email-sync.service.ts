@@ -24,7 +24,6 @@ export class EmailSyncService {
 
     const syncState = await this.getSyncState(userId);
     
-    // Add timeout check - if sync has been in progress for more than 30 minutes, reset it
     const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
     const now = new Date();
     const lastUpdate = syncState.updatedAt || syncState.createdAt;
@@ -36,7 +35,6 @@ export class EmailSyncService {
         syncInProgress: false,
         isInitialSyncing: false
       });
-      // Refresh sync state after reset
       const refreshedState = await this.getSyncState(userId);
       syncState.syncInProgress = refreshedState.syncInProgress;
       syncState.isInitialSyncing = refreshedState.isInitialSyncing;
@@ -66,11 +64,9 @@ export class EmailSyncService {
         jobId: `sync-${userId}-${strategy}-${Date.now()}`,
         removeOnComplete: 10,
         removeOnFail: 5,
-        // Add job timeout
         timeout: 10 * 60 * 1000, // 10 minutes per job
       });
     } catch (error) {
-      // If adding job fails, reset sync state
       await this.updateSyncState(userId, { syncInProgress: false });
       throw error;
     }
@@ -87,7 +83,6 @@ export class EmailSyncService {
     
     if (!strategy) {
       console.warn('Legacy job without strategy detected, skipping');
-      // Reset sync state for legacy jobs
       await this.updateSyncState(userId, { syncInProgress: false });
       return { processedCount: 0, hasMore: false, strategy: 'unknown' };
     }
@@ -150,7 +145,6 @@ export class EmailSyncService {
 
     } catch (error) {
       console.error(`❌ Sync error for user ${userId}:`, error);
-      // Always reset sync state on error
       await this.updateSyncState(userId, { 
         syncInProgress: false,
         isInitialSyncing: false 
@@ -159,7 +153,6 @@ export class EmailSyncService {
     }
   }
 
-  // Add method to manually reset sync state (useful for debugging)
   static async resetSyncState(userId: string) {
     await this.updateSyncState(userId, {
       syncInProgress: false,
@@ -171,7 +164,6 @@ export class EmailSyncService {
     return { message: 'Sync state reset successfully' };
   }
 
-  // Add method to check for stuck syncs and reset them
   static async cleanupStuckSyncs() {
     const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
     const cutoffTime = new Date(Date.now() - SYNC_TIMEOUT_MS);
@@ -377,7 +369,7 @@ export class EmailSyncService {
       where: { userId },
       update: {
         ...data,
-        updatedAt: new Date(), // Ensure updatedAt is always set
+        updatedAt: new Date(),
       },
       create: {
         userId,
