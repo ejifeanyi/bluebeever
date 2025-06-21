@@ -7,6 +7,7 @@ from datetime import datetime
 class StandaloneEmailRequest(BaseModel):
     """Schema for categorizing a standalone email"""
     email_id: str = Field(..., description="Unique identifier from Express API")
+    user_id: Optional[str] = Field(default=None, description="User ID if available")
     subject: str = Field(..., description="Email subject line")
     body: str = Field(..., description="Full email body content")
     snippet: str = Field(..., description="Brief email snippet")
@@ -19,6 +20,7 @@ class StandaloneEmailRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "email_id": "email_123",
+                "user_id": "user_456",
                 "subject": "Weekly team meeting",
                 "body": "Hi team, our weekly meeting is scheduled for tomorrow...",
                 "snippet": "Hi team, our weekly meeting is scheduled...",
@@ -32,6 +34,7 @@ class StandaloneEmailRequest(BaseModel):
 class ThreadedEmailRequest(BaseModel):
     """Schema for categorizing an email that's part of a thread"""
     email_id: str = Field(..., description="Unique identifier from Express API")
+    user_id: Optional[str] = Field(default=None, description="User ID if available")
     thread_id: str = Field(..., description="Thread identifier from Express API")
     subject: str = Field(..., description="Current email subject line")
     body: str = Field(..., description="Current email body content")
@@ -51,6 +54,7 @@ class ThreadedEmailRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "email_id": "email_456",
+                "user_id": "user_456",
                 "thread_id": "thread_789",
                 "subject": "Re: Weekly team meeting",
                 "body": "Thanks for the update. I'll attend the meeting...",
@@ -71,6 +75,7 @@ class ThreadedEmailRequest(BaseModel):
 class CategorizationResponse(BaseModel):
     """Response schema for email categorization"""
     email_id: str = Field(..., description="The email ID that was processed")
+    user_id: Optional[str] = Field(default=None, description="User ID if available")
     assigned_category: str = Field(..., description="The category assigned to this email")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="AI confidence in categorization (0-1)")
     is_new_category: bool = Field(..., description="Whether this category was just created")
@@ -81,6 +86,7 @@ class CategorizationResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "email_id": "email_123",
+                "user_id": "user_456",
                 "assigned_category": "Work Meetings",
                 "confidence_score": 0.92,
                 "is_new_category": False,
@@ -93,6 +99,7 @@ class ErrorResponse(BaseModel):
     """Error response schema"""
     error: str = Field(..., description="Error message")
     email_id: Optional[str] = Field(default=None, description="Email ID if available")
+    user_id: Optional[str] = Field(default=None, description="User ID if available")
     timestamp: datetime = Field(..., description="When the error occurred")
     
     class Config:
@@ -100,6 +107,7 @@ class ErrorResponse(BaseModel):
             "example": {
                 "error": "Unable to process email content",
                 "email_id": "email_123",
+                "user_id": "user_456",
                 "timestamp": "2024-06-21T10:30:15Z"
             }
         }
