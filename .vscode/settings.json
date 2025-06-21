@@ -3,5 +3,6 @@
     {
       "mode": "auto"
     }
-  ]
+  ],
+  "python.defaultInterpreterPath": "env/bin/python"
 }
