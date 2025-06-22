@@ -1,230 +1,306 @@
 from sqlalchemy.orm import Session
-from typing import Tuple, List, Optional
+from typing import List, Optional
 from datetime import datetime
 import re
-import random
+import logging
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
 from .crud import (
     get_categories, create_category, get_category_by_name, 
     update_category_email_count, find_similar_categories
 )
 from .schemas import StandaloneEmailRequest, ThreadedEmailRequest, CategorizationResponse
 
-class BasicCategorizationService:
+logger = logging.getLogger(__name__)
+
+class EmailCategorizationService:
     """
-    Basic categorization service for testing purposes.
-    This uses simple keyword matching and pattern recognition.
-    In production, you'd replace this with actual AI/ML models.
+    AI-powered email categorization service using Sentence Transformers
     """
     
-    def __init__(self):
-        # Basic keyword patterns for different categories
-        self.category_patterns = {
-            "Work Meetings": [
-                r"\b(meeting|meet|conference|call|zoom|teams)\b",
-                r"\b(agenda|schedule|calendar)\b",
-                r"\b(sync|standup|retrospective)\b"
-            ],
-            "Travel": [
-                r"\b(flight|hotel|booking|reservation|trip|travel)\b",
-                r"\b(airline|airport|vacation|holiday)\b",
-                r"\b(itinerary|destination|departure)\b"
-            ],
-            "Finance": [
-                r"\b(invoice|payment|bill|receipt|expense|budget)\b",
-                r"\b(bank|credit|debit|transaction|money)\b",
-                r"\b(salary|payroll|accounting|tax)\b"
-            ],
-            "Shopping": [
-                r"\b(order|purchase|buy|cart|checkout|delivery)\b",
-                r"\b(amazon|ebay|shop|store|retail)\b",
-                r"\b(product|item|shipping|discount)\b"
-            ],
-            "Social": [
-                r"\b(party|event|celebration|birthday|wedding)\b",
-                r"\b(friend|family|social|gathering)\b",
-                r"\b(invitation|rsvp|dinner|lunch)\b"
-            ],
-            "Health": [
-                r"\b(doctor|appointment|medical|health|hospital)\b",
-                r"\b(prescription|medication|insurance|clinic)\b",
-                r"\b(fitness|gym|workout|diet|wellness)\b"
-            ],
-            "Education": [
-                r"\b(course|class|lecture|assignment|homework|study)\b",
-                r"\b(university|college|school|education|learn)\b",
-                r"\b(grade|exam|test|quiz|student|teacher)\b"
-            ]
-        }
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        """Initialize with a lightweight, fast sentence transformer model"""
+        try:
+            self.model = SentenceTransformer(model_name)
+            self.embedding_dim = self.model.get_sentence_embedding_dimension()
+            logger.info(f"Loaded model {model_name} with {self.embedding_dim} dimensions")
+        except Exception as e:
+            logger.error(f"Failed to load model {model_name}: {e}")
+            raise
     
-    def extract_keywords(self, text: str) -> List[str]:
-        """Extract important keywords from email content"""
-        # Convert to lowercase and remove special characters
-        clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
-        words = clean_text.split()
+    def clean_email_content(self, content: str) -> str:
+        """Clean and preprocess email content"""
+        if not content:
+            return ""
         
-        # Filter out common stop words and short words
-        stop_words = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
-            'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 
-            'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
-            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they'
-        }
+        # Remove HTML tags
+        content = re.sub(r'<[^>]+>', ' ', content)
         
-        keywords = [word for word in words if len(word) > 2 and word not in stop_words]
-        return keywords[:20]  # Return top 20 keywords
+        # Remove email signatures (common patterns)
+        signature_patterns = [
+            r'\n--\s*\n.*$',  # Standard signature delimiter
+            r'\nSent from my.*$',  # Mobile signatures
+            r'\nBest regards,.*$',  # Common closings
+            r'\nThanks,.*$',
+            r'\nRegards,.*$',
+        ]
+        for pattern in signature_patterns:
+            content = re.sub(pattern, '', content, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Remove quoted text (replies starting with >)
+        lines = content.split('\n')
+        clean_lines = []
+        for line in lines:
+            if not line.strip().startswith('>'):
+                clean_lines.append(line)
+            else:
+                break  # Stop at first quoted line
+        content = '\n'.join(clean_lines)
+        
+        # Remove excessive whitespace
+        content = re.sub(r'\s+', ' ', content)
+        content = content.strip()
+        
+        return content
     
-    def calculate_category_score(self, content: str, patterns: List[str]) -> float:
-        """Calculate how well content matches a category's patterns"""
-        content_lower = content.lower()
-        matches = 0
-        total_patterns = len(patterns)
+    def extract_meaningful_text(self, subject: str, body: str) -> str:
+        """Extract the most meaningful text for categorization"""
+        cleaned_body = self.clean_email_content(body)
         
-        for pattern in patterns:
-            if re.search(pattern, content_lower):
-                matches += 1
-        
-        return matches / total_patterns if total_patterns > 0 else 0.0
-    
-    def find_best_category(self, content: str) -> Tuple[str, float]:
-        """Find the best matching category for the given content"""
-        best_category = None
-        best_score = 0.0
-        
-        for category_name, patterns in self.category_patterns.items():
-            score = self.calculate_category_score(content, patterns)
-            if score > best_score:
-                best_score = score
-                best_category = category_name
-        
-        return best_category, best_score
-    
-    def generate_category_name(self, content: str) -> str:
-        """Generate a new category name based on content"""
-        keywords = self.extract_keywords(content)
-        
-        if not keywords:
-            return "General"
-        
-        # Take the most relevant keywords and create a category name
-        primary_keywords = keywords[:3]
-        
-        # Simple heuristics for category naming
-        if any(word in ['work', 'job', 'office', 'business'] for word in primary_keywords):
-            return f"Work - {primary_keywords[0].title()}"
-        elif any(word in ['personal', 'family', 'friend'] for word in primary_keywords):
-            return f"Personal - {primary_keywords[0].title()}"
+        # Combine subject and body, giving more weight to subject
+        if subject and cleaned_body:
+            return f"{subject}. {cleaned_body[:500]}"  # Limit body to 500 chars
+        elif subject:
+            return subject
+        elif cleaned_body:
+            return cleaned_body[:500]
         else:
-            return primary_keywords[0].title()
+            return "General email"
     
-    def create_simple_embedding(self, text: str) -> List[float]:
-        """Create a simple embedding representation (for testing only)"""
-        # This is a very basic embedding - just keyword frequency
-        # In production, use proper sentence transformers or OpenAI embeddings
-        keywords = self.extract_keywords(text)
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding for given text"""
+        try:
+            if not text or not text.strip():
+                # Return zero vector for empty text
+                return [0.0] * self.embedding_dim
+            
+            embedding = self.model.encode(text, convert_to_tensor=False)
+            return embedding.tolist()
+        except Exception as e:
+            logger.error(f"Failed to generate embedding: {e}")
+            return [0.0] * self.embedding_dim
+    
+    def calculate_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
+        """Calculate cosine similarity between two embeddings"""
+        try:
+            if not embedding1 or not embedding2:
+                return 0.0
+            
+            vec1 = np.array(embedding1).reshape(1, -1)
+            vec2 = np.array(embedding2).reshape(1, -1)
+            
+            similarity = cosine_similarity(vec1, vec2)[0][0]
+            return float(similarity)
+        except Exception as e:
+            logger.error(f"Failed to calculate similarity: {e}")
+            return 0.0
+    
+    def find_best_matching_category(self, db: Session, email_embedding: List[float], 
+                                  threshold: float = 0.7) -> Optional[tuple]:
+        """Find the best matching existing category"""
+        try:
+            categories = get_categories(db, limit=1000)  # Get all categories
+            
+            if not categories:
+                return None
+            
+            best_category = None
+            best_similarity = 0.0
+            
+            for category in categories:
+                if not category.embedding:
+                    continue
+                
+                similarity = self.calculate_similarity(email_embedding, category.embedding)
+                
+                if similarity > best_similarity and similarity >= threshold:
+                    best_similarity = similarity
+                    best_category = category
+            
+            if best_category:
+                return best_category, best_similarity
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error finding matching category: {e}")
+            return None
+    
+    def generate_category_name(self, text: str) -> str:
+        """Generate a meaningful category name from email content"""
+        # Extract key topics using simple keyword extraction
+        words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
         
-        # Create a simple 100-dimensional vector based on keyword presence
-        embedding = [0.0] * 100
+        # Common business/personal keywords
+        business_keywords = ['meeting', 'project', 'work', 'business', 'team', 'client', 'deadline']
+        personal_keywords = ['family', 'friend', 'personal', 'vacation', 'party', 'social']
+        finance_keywords = ['payment', 'invoice', 'bill', 'bank', 'money', 'expense']
+        travel_keywords = ['flight', 'hotel', 'trip', 'travel', 'booking', 'reservation']
         
-        for i, keyword in enumerate(keywords[:50]):  # Use first 50 keywords
-            # Simple hash-based positioning
-            position = hash(keyword) % 100
-            embedding[position] = min(1.0, embedding[position] + 0.1)
-        
-        # Add some randomness to make it more realistic
-        for i in range(len(embedding)):
-            embedding[i] += random.uniform(-0.05, 0.05)
-            embedding[i] = max(0.0, min(1.0, embedding[i]))  # Clamp to [0,1]
-        
-        return embedding
+        # Check for keyword categories
+        if any(word in words for word in business_keywords):
+            return "Work & Business"
+        elif any(word in words for word in finance_keywords):
+            return "Finance & Bills"
+        elif any(word in words for word in travel_keywords):
+            return "Travel & Bookings"
+        elif any(word in words for word in personal_keywords):
+            return "Personal & Social"
+        else:
+            # Extract most common meaningful words
+            meaningful_words = [w for w in words if len(w) > 3 and w not in 
+                              ['this', 'that', 'with', 'from', 'they', 'have', 'will']]
+            
+            if meaningful_words:
+                return meaningful_words[0].title() + " Related"
+            else:
+                return "General"
     
     def categorize_standalone_email(self, db: Session, request: StandaloneEmailRequest) -> CategorizationResponse:
-        """Categorize a standalone email"""
-        # Combine subject and body for analysis
-        content = f"{request.subject} {request.body}"
-        
-        # Try to find existing category
-        best_category, confidence = self.find_best_category(content)
-        
-        # Minimum confidence threshold
-        min_confidence = 0.3
-        is_new_category = False
-        
-        if confidence < min_confidence or not best_category:
-            # Create new category
-            category_name = self.generate_category_name(content)
-            embedding = self.create_simple_embedding(content)
+        """Categorize a standalone email using AI embeddings"""
+        try:
+            # Extract and clean meaningful text
+            meaningful_text = self.extract_meaningful_text(request.subject, request.body)
             
-            # Check if category already exists
-            existing_category = get_category_by_name(db, category_name)
-            if not existing_category:
-                create_category(
-                    db=db,
-                    name=category_name,
-                    description=f"Auto-generated category for emails like: {request.subject}",
-                    embedding=embedding,
-                    sample_content=request.snippet
-                )
-                is_new_category = True
+            # Generate embedding
+            email_embedding = self.generate_embedding(meaningful_text)
             
-            assigned_category = category_name
-            confidence = 0.7  # Default confidence for new categories
-        else:
-            assigned_category = best_category
-            is_new_category = False
-        
-        # Update email count for the category
-        category = get_category_by_name(db, assigned_category)
-        if category:
-            update_category_email_count(db, category.id, 1)
-        
-        return CategorizationResponse(
-            email_id=request.email_id,
-            assigned_category=assigned_category,
-            confidence_score=confidence,
-            is_new_category=is_new_category,
-            processing_timestamp=datetime.now(),
-            category_description=f"Category for {assigned_category.lower()} related emails"
-        )
-    
-    def categorize_threaded_email(self, db: Session, request: ThreadedEmailRequest) -> CategorizationResponse:
-        """Categorize a threaded email"""
-        # For threaded emails, prioritize previous category if confidence is high
-        if request.previous_category:
-            # Check if we should stick with the previous category
-            content = f"{request.subject} {request.body}"
-            category_confidence = self.calculate_category_score(
-                content, 
-                self.category_patterns.get(request.previous_category, [])
-            )
+            # Try to find existing category
+            match_result = self.find_best_matching_category(db, email_embedding)
             
-            # If the content still matches the previous category well, use it
-            if category_confidence > 0.2:  # Lower threshold for thread consistency
-                category = get_category_by_name(db, request.previous_category)
-                if category:
-                    update_category_email_count(db, category.id, 1)
+            if match_result:
+                category, similarity = match_result
+                
+                # Update email count
+                update_category_email_count(db, category.id, 1)
                 
                 return CategorizationResponse(
                     email_id=request.email_id,
-                    assigned_category=request.previous_category,
-                    confidence_score=min(0.9, category_confidence + 0.3),  # Boost confidence for thread consistency
+                    user_id=request.user_id,
+                    assigned_category=category.name,
+                    confidence_score=similarity,
                     is_new_category=False,
                     processing_timestamp=datetime.now(),
-                    category_description=f"Continued from thread category"
+                    category_description=category.description
                 )
-        
-        # If no previous category or low confidence, treat as standalone
-        standalone_request = StandaloneEmailRequest(
-            email_id=request.email_id,
-            subject=request.subject,
-            body=request.body,
-            snippet=request.snippet,
-            sender_email=request.sender_email,
-            recipient_emails=request.recipient_emails,
-            timestamp=request.timestamp,
-            labels=request.labels
-        )
-        
-        return self.categorize_standalone_email(db, standalone_request)
+            
+            else:
+                # Create new category
+                category_name = self.generate_category_name(meaningful_text)
+                
+                # Check if category name already exists
+                existing = get_category_by_name(db, category_name)
+                if existing:
+                    category_name = f"{category_name} {datetime.now().strftime('%m%d')}"
+                
+                new_category = create_category(
+                    db=db,
+                    name=category_name,
+                    description=f"Auto-generated category based on: {request.subject[:50]}...",
+                    embedding=email_embedding,
+                    sample_content=request.snippet
+                )
+                
+                # Set initial email count
+                update_category_email_count(db, new_category.id, 1)
+                
+                return CategorizationResponse(
+                    email_id=request.email_id,
+                    user_id=request.user_id,
+                    assigned_category=new_category.name,
+                    confidence_score=0.8,  # High confidence for new category
+                    is_new_category=True,
+                    processing_timestamp=datetime.now(),
+                    category_description=new_category.description
+                )
+                
+        except Exception as e:
+            logger.error(f"Error categorizing standalone email {request.email_id}: {e}")
+            # Fallback to general category
+            general_category = get_category_by_name(db, "General")
+            if not general_category:
+                general_category = create_category(db, "General", "General email category")
+            
+            update_category_email_count(db, general_category.id, 1)
+            
+            return CategorizationResponse(
+                email_id=request.email_id,
+                user_id=request.user_id,
+                assigned_category="General",
+                confidence_score=0.5,
+                is_new_category=False,
+                processing_timestamp=datetime.now(),
+                category_description="General email category"
+            )
+    
+    def categorize_threaded_email(self, db: Session, request: ThreadedEmailRequest) -> CategorizationResponse:
+        """Categorize a threaded email with context awareness"""
+        try:
+            # If we have previous category info, check if current email is similar
+            if request.previous_category:
+                previous_category = get_category_by_name(db, request.previous_category)
+                
+                if previous_category and previous_category.embedding:
+                    # Generate embedding for current email
+                    meaningful_text = self.extract_meaningful_text(request.subject, request.body)
+                    current_embedding = self.generate_embedding(meaningful_text)
+                    
+                    # Check similarity with previous category
+                    similarity = self.calculate_similarity(current_embedding, previous_category.embedding)
+                    
+                    # Lower threshold for thread consistency
+                    if similarity >= 0.5:
+                        update_category_email_count(db, previous_category.id, 1)
+                        
+                        return CategorizationResponse(
+                            email_id=request.email_id,
+                            user_id=request.user_id,
+                            assigned_category=previous_category.name,
+                            confidence_score=min(0.95, similarity + 0.2),  # Boost for thread consistency
+                            is_new_category=False,
+                            processing_timestamp=datetime.now(),
+                            category_description=previous_category.description
+                        )
+            
+            # If no previous category or low similarity, treat as standalone
+            standalone_request = StandaloneEmailRequest(
+                email_id=request.email_id,
+                user_id=request.user_id,
+                subject=request.subject,
+                body=request.body,
+                snippet=request.snippet,
+                sender_email=request.sender_email,
+                recipient_emails=request.recipient_emails,
+                timestamp=request.timestamp,
+                labels=request.labels
+            )
+            
+            return self.categorize_standalone_email(db, standalone_request)
+            
+        except Exception as e:
+            logger.error(f"Error categorizing threaded email {request.email_id}: {e}")
+            return self.categorize_standalone_email(db, StandaloneEmailRequest(
+                email_id=request.email_id,
+                user_id=request.user_id,
+                subject=request.subject,
+                body=request.body,
+                snippet=request.snippet,
+                sender_email=request.sender_email,
+                recipient_emails=request.recipient_emails,
+                timestamp=request.timestamp,
+                labels=request.labels
+            ))
 
 # Global service instance
-categorization_service = BasicCategorizationService()
+categorization_service = EmailCategorizationService()
