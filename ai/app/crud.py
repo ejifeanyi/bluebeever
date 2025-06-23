@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text, or_
 from typing import List, Optional, Tuple
 from .models import Category
-import json
 import logging
 
 logger = logging.getLogger(__name__)

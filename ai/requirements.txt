@@ -3,13 +3,14 @@ uvicorn
 pydantic
 pydantic-settings
 sqlalchemy
-psycopg2
+psycopg2-binary
 sentence-transformers
 scikit-learn
 numpy
 celery 
 redis
 supabase
+python-dotenv
 cachetools
 pika
 passlib[bcrypt]

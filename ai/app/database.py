@@ -10,12 +10,22 @@ logger = logging.getLogger(__name__)
 
 # SQLAlchemy setup with better error handling
 try:
-    engine = create_engine(
-        settings.database_url, 
-        connect_args=settings.database_connection_args,
-        pool_pre_ping=True,  # Validate connections before use
-        echo=settings.is_development  # SQL logging in development only
-    )
+    if "sqlite" in settings.database_url:
+        engine = create_engine(
+            settings.database_url, 
+            connect_args=settings.database_connection_args,
+            pool_pre_ping=True,
+            echo=settings.is_development
+        )
+    else:
+        engine = create_engine(
+            settings.database_url,
+            pool_size=settings.db_pool_size,
+            pool_timeout=settings.db_pool_timeout,
+            max_overflow=settings.db_pool_overflow,
+            pool_pre_ping=True,
+            echo=settings.is_development
+        )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base = declarative_base()
     logger.info(f"Database engine created successfully for: {settings.database_url.split('@')[-1] if '@' in settings.database_url else 'local database'}")

@@ -1,10 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import declarative_base
+from .database import Base
 import json
-
-Base = declarative_base()
 
 class Category(Base):
     __tablename__ = "categories"

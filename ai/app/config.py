@@ -69,18 +69,10 @@ class Settings(BaseSettings):
     
     @property
     def database_connection_args(self) -> dict:
-        """Get database connection arguments based on environment"""
         if "sqlite" in self.database_url:
             return {"check_same_thread": False}
         else:
-            # PostgreSQL/Supabase connection args
-            return {
-                "pool_size": self.db_pool_size,
-                "pool_timeout": self.db_pool_timeout,
-                "pool_overflow": self.db_pool_overflow,
-                "pool_pre_ping": True,  # Validates connections before use
-                "echo": not self.is_production  # SQL logging only in dev
-            }
+            return {}
     
     def log_configuration(self):
         """Log current configuration (excluding sensitive data)"""
