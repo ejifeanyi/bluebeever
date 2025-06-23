@@ -1,3 +1,6 @@
 env
 .env
 test.db
+.env.production
+.env.development
+.env.staging

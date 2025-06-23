@@ -3,6 +3,15 @@ uvicorn
 pydantic
 pydantic-settings
 sqlalchemy
+psycopg2
 sentence-transformers
 scikit-learn
 numpy
+celery 
+redis
+supabase
+cachetools
+pika
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
