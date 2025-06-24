@@ -119,10 +119,13 @@ class EmailCategorizationService:
         return "General"
     
     def categorize_standalone_email(self, db: Session, request: StandaloneEmailRequest) -> CategorizationResponse:
-        """Categorize standalone email"""
+        """Fixed categorize standalone email - properly creates new categories"""
         try:
             meaningful_text = self.extract_meaningful_text(request.subject, request.body)
+            print(f"DEBUG: Meaningful text: '{meaningful_text}'")  # Debug logging
+            
             email_embedding = self.generate_embedding(meaningful_text)
+            print(f"DEBUG: Generated embedding with {len(email_embedding)} dimensions")
             
             # Find similar categories
             vector_store = VectorStore(db)
@@ -132,10 +135,13 @@ class EmailCategorizationService:
                 limit=1
             )
             
+            print(f"DEBUG: Found {len(similar_categories)} similar categories")
+            
             if similar_categories:
                 category, similarity = similar_categories[0]
+                print(f"DEBUG: Using existing category: {category.name} (similarity: {similarity:.3f})")
                 
-                # Update email count (this should be in a transaction)
+                # Update email count
                 from .crud import update_category_email_count
                 update_category_email_count(db, category.id, 1)
                 
@@ -143,67 +149,113 @@ class EmailCategorizationService:
                     request.email_id, request.user_id, category.name,
                     similarity, False, category.description
                 )
-            
             else:
-                # Create new category
+                # THIS IS THE KEY FIX: Create new category when no matches found
+                print("DEBUG: No similar categories found, creating new category")
+                
                 category_name = self.generate_category_name(meaningful_text)
+                print(f"DEBUG: Generated category name: '{category_name}'")
+                
+                # IMPORTANT: Don't create "General" categories automatically
+                if category_name == "General":
+                    # Try to extract a better name from the content
+                    category_name = self._extract_better_category_name(meaningful_text, request.subject)
+                    print(f"DEBUG: Improved category name: '{category_name}'")
+                
                 return self._create_new_category_response(
                     db, request, category_name, meaningful_text, email_embedding
                 )
-                
+            
         except Exception as e:
             logger.error(f"Error categorizing email {request.email_id}: {e}")
+            # Only fall back to General if there's an actual error
             return self._fallback_response(db, request)
-    
+
     def categorize_threaded_email(self, db: Session, request) -> CategorizationResponse:
-        """Categorize threaded email with context"""
+        """Fixed categorize threaded email with proper debugging and fallback logic"""
         try:
+            print(f"DEBUG THREADED: Starting categorization for email {request.email_id}")
+            print(f"DEBUG THREADED: Previous category: {getattr(request, 'previous_category', 'None')}")
+            print(f"DEBUG THREADED: Thread subject: {getattr(request, 'thread_subject', 'None')}")
+            print(f"DEBUG THREADED: Current subject: {request.subject}")
+            
             # Check thread consistency first
-            if request.previous_category:
+            if hasattr(request, 'previous_category') and request.previous_category:
+                print(f"DEBUG THREADED: Checking previous category: {request.previous_category}")
+                
                 from .crud import get_category_by_name
                 previous_category = get_category_by_name(db, request.previous_category)
                 
-                if previous_category and previous_category.embedding_vector:
-                    # Check if subjects match (thread continuation)
-                    if ThreadUtils.is_thread_continuation(request.subject, request.thread_subject):
-                        meaningful_text = self.extract_meaningful_text(request.subject, request.body)
-                        current_embedding = self.generate_embedding(meaningful_text)
+                if previous_category:
+                    print(f"DEBUG THREADED: Found previous category in DB: {previous_category.name}")
+                    print(f"DEBUG THREADED: Has embedding: {previous_category.embedding_vector is not None}")
+                    
+                    if previous_category.embedding_vector:
+                        # Check if subjects match (thread continuation)
+                        thread_subject = getattr(request, 'thread_subject', None)
+                        is_continuation = ThreadUtils.is_thread_continuation(request.subject, thread_subject)
+                        print(f"DEBUG THREADED: Is thread continuation: {is_continuation}")
                         
-                        similarity = self._calculate_similarity(
-                            current_embedding, previous_category.embedding_vector
-                        )
-                        
-                        if similarity >= settings.thread_consistency_threshold:
-                            from .crud import update_category_email_count
-                            update_category_email_count(db, previous_category.id, 1)
+                        if is_continuation:
+                            meaningful_text = self.extract_meaningful_text(request.subject, request.body)
+                            current_embedding = self.generate_embedding(meaningful_text)
                             
-                            # Boost confidence for thread consistency
-                            boosted_confidence = min(0.95, similarity + settings.confidence_boost_for_threads)
-                            
-                            return self._create_response(
-                                request.email_id, request.user_id, previous_category.name,
-                                boosted_confidence, False, previous_category.description
+                            similarity = self._calculate_similarity(
+                                current_embedding, previous_category.embedding_vector
                             )
+                            
+                            print(f"DEBUG THREADED: Similarity with previous category: {similarity:.3f}")
+                            print(f"DEBUG THREADED: Thread consistency threshold: {settings.thread_consistency_threshold}")
+                            
+                            if similarity >= settings.thread_consistency_threshold:
+                                print(f"DEBUG THREADED: Using previous category due to thread consistency")
+                                
+                                from .crud import update_category_email_count
+                                update_category_email_count(db, previous_category.id, 1)
+                                
+                                # Boost confidence for thread consistency
+                                boosted_confidence = min(0.95, similarity + getattr(settings, 'confidence_boost_for_threads', 0.1))
+                                
+                                return self._create_response(
+                                    request.email_id, request.user_id, previous_category.name,
+                                    boosted_confidence, False, previous_category.description
+                                )
+                            else:
+                                print(f"DEBUG THREADED: Similarity too low, falling back to standalone categorization")
+                        else:
+                            print(f"DEBUG THREADED: Not a thread continuation, treating as standalone")
+                    else:
+                        print(f"DEBUG THREADED: Previous category has no embedding, treating as standalone")
+                else:
+                    print(f"DEBUG THREADED: Previous category not found in DB, treating as standalone")
+            else:
+                print(f"DEBUG THREADED: No previous category provided, treating as standalone")
             
             # Fall back to standalone categorization
+            print(f"DEBUG THREADED: Falling back to standalone categorization")
+            
             standalone_request = StandaloneEmailRequest(
                 email_id=request.email_id,
                 user_id=request.user_id,
                 subject=request.subject,
                 body=request.body,
-                snippet=request.snippet,
-                sender_email=request.sender_email,
-                recipient_emails=request.recipient_emails,
-                timestamp=request.timestamp,
-                labels=request.labels
+                snippet=getattr(request, 'snippet', ''),
+                sender_email=getattr(request, 'sender_email', ''),
+                recipient_emails=getattr(request, 'recipient_emails', []),
+                timestamp=getattr(request, 'timestamp', datetime.now()),
+                labels=getattr(request, 'labels', [])
             )
             
-            return self.categorize_standalone_email(db, standalone_request)
+            result = self.categorize_standalone_email(db, standalone_request)
+            print(f"DEBUG THREADED: Standalone result: {result.assigned_category}")
+            return result
             
         except Exception as e:
             logger.error(f"Error categorizing threaded email {request.email_id}: {e}")
+            print(f"DEBUG THREADED: Exception occurred: {e}")
             return self._fallback_response(db, request)
     
+   
     def _calculate_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
         """Calculate cosine similarity between embeddings"""
         try:

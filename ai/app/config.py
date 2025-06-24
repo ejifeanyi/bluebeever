@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     max_retries: int = int(os.getenv("MAX_RETRIES", "3"))
     
     # ML Model Configuration
-    sentence_transformer_model: str = os.getenv("MODEL_NAME", "all-MiniLM-L3-v2")
+    sentence_transformer_model: str = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
     # Enable model caching in production to avoid re-downloading
     model_cache_dir: Optional[str] = os.getenv("MODEL_CACHE_DIR", "./models")
     
