@@ -27,26 +27,31 @@ model User {
 }
 
 model Email {
-  id               String    @id @default(cuid())
-  userId           String
-  threadId         String
-  messageId        String    @unique
-  subject          String
-  from             String
-  to               String[]
-  cc               String[]
-  bcc              String[]
-  body             String
-  snippet          String
-  isRead           Boolean   @default(false)
-  date             DateTime
-  labels           String[]
-  attachments      Json?
-  hasAttachments   Boolean   @default(false)
-  processingStatus String?
-  processedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  userId              String
+  threadId            String
+  messageId           String    @unique
+  subject             String
+  from                String
+  to                  String[]
+  cc                  String[]
+  bcc                 String[]
+  body                String
+  snippet             String
+  isRead              Boolean   @default(false)
+  date                DateTime
+  labels              String[]
+  attachments         Json?
+  hasAttachments      Boolean   @default(false)
+  processingStatus    String?
+  processedAt         DateTime?
+  category            String?
+  categoryConfidence  Float?
+  categoryDescription String?
+  isNewCategory       Boolean?
+  categorizedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -56,6 +61,7 @@ model Email {
   @@index([messageId])
   @@index([isRead])
   @@index([processingStatus])
+  @@index([category])
   @@map("emails")
 }
 
