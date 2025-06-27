@@ -17,6 +17,7 @@ const envSchema = z.object({
   REDIS_HOST: z.string().min(1),
   REDIS_PORT: z.string().transform(Number),
   REDIS_PASSWORD: z.string().min(1),
+  AI_SERVICE_URL: z.string().url(), 
 });
 
 const parseEnv = () => {

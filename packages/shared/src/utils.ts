@@ -12,16 +12,6 @@ export const createApiResponse = <T>(
   message,
 });
 
-export const createSuccessResponse = <T>(
-  data: T,
-  message?: string
-): ApiResponse<T> => createApiResponse(true, data, undefined, message);
-
-export const createErrorResponse = (
-  error: string,
-  message?: string
-): ApiResponse => createApiResponse(false, undefined, error, message);
-
 export const isTokenExpired = (expiresAt: Date): boolean => {
   return Date.now() >= expiresAt.getTime();
 };

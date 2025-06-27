@@ -1,157 +1,82 @@
-import axios from 'axios';
-import { Email } from '@crate/shared';
+import { env } from '@/config/env';
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-
-interface StandaloneEmailRequest {
-  email_id: string;
-  user_id: string;
-  subject: string;
-  body: string;
-  snippet: string;
-  sender_email: string;
-  recipient_emails: string[];
-  timestamp: string;
-  labels: string[];
-}
-
-interface ThreadedEmailRequest extends StandaloneEmailRequest {
-  thread_subject: string;
-  previous_category: string;
-  thread_id: string;
-}
-
-interface AICategoryResponse {
-  email_id: string;
-  user_id: string;
+interface CategoryResult {
   assigned_category: string;
   confidence_score: number;
-  is_new_category: boolean;
-  processing_timestamp: string;
   category_description: string;
+  is_new_category: boolean;
+}
+
+// Type for the AI service response
+interface AiServiceResponse {
+  category?: string;
+  confidence?: number;
+  description?: string;
+  isNew?: boolean;
 }
 
 export class AiCategorizationService {
-  private static AI_SERVICE_BASE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-  private static TIMEOUT = 30000;
-
-  static async categorizeStandaloneEmail(email: Email): Promise<AICategoryResponse> {
-    const request: StandaloneEmailRequest = {
-      email_id: email.id,
-      user_id: email.userId,
-      subject: email.subject,
-      body: email.body,
-      snippet: email.snippet,
-      sender_email: email.from,
-      recipient_emails: email.to,
-      timestamp: email.date.toISOString(),
-      labels: email.labels,
-    };
-
+  static async categorizeEmail(email: any): Promise<CategoryResult> {
     try {
-      const response = await axios.post<AICategoryResponse>(
-        `${this.AI_SERVICE_BASE_URL}/categorize/standalone`,
-        request,
-        {
-          timeout: this.TIMEOUT,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const response = await fetch(`${env.AI_SERVICE_URL}/categorize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Removed authentication since it's handled by the express app
+        },
+        body: JSON.stringify({
+          subject: email.subject,
+          from: email.from,
+          body: email.body || email.snippet,
+          snippet: email.snippet,
+        }),
+      });
 
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to categorize standalone email ${email.id}:`, error);
-      throw new Error(`AI categorization failed: ${error}`);
-    }
-  }
+      if (!response.ok) {
+        throw new Error(`AI service error: ${response.status}`);
+      }
 
-  static async categorizeThreadedEmail(
-    email: Email,
-    threadSubject: string,
-    previousCategory?: string
-  ): Promise<AICategoryResponse> {
-    const request: ThreadedEmailRequest = {
-      email_id: email.id,
-      user_id: email.userId,
-      subject: email.subject,
-      body: email.body,
-      snippet: email.snippet,
-      sender_email: email.from,
-      recipient_emails: email.to,
-      timestamp: email.date.toISOString(),
-      labels: email.labels,
-      thread_subject: threadSubject,
-      previous_category: previousCategory || '',
-      thread_id: email.threadId,
-    };
-
-    try {
-      const response = await axios.post<AICategoryResponse>(
-        `${this.AI_SERVICE_BASE_URL}/categorize/threaded`,
-        request,
-        {
-          timeout: this.TIMEOUT,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to categorize threaded email ${email.id}:`, error);
-      throw new Error(`AI categorization failed: ${error}`);
-    }
-  }
-
-  static async categorizeEmail(email: Email): Promise<AICategoryResponse> {
-    try {
-      const threadEmails = await this.getThreadEmails(email.userId, email.threadId);
+      const result = await response.json() as AiServiceResponse;
       
-      if (threadEmails.length <= 1) {
-        return await this.categorizeStandaloneEmail(email);
-      }
-
-      const threadSubject = this.extractThreadSubject(threadEmails);
-      const previousCategory = this.findPreviousCategory(threadEmails, email.id);
-
-      return await this.categorizeThreadedEmail(email, threadSubject, previousCategory);
+      return {
+        assigned_category: result.category || 'Other',
+        confidence_score: result.confidence || 0.5,
+        category_description: result.description || 'AI categorized email',
+        is_new_category: result.isNew || false,
+      };
     } catch (error) {
-      console.error(`Email categorization failed for ${email.id}:`, error);
-      throw error;
+      console.error('AI categorization failed:', error);
+      
+      return {
+        assigned_category: this.fallbackCategory(email),
+        confidence_score: 0.1,
+        category_description: 'Fallback category due to AI service error',
+        is_new_category: false,
+      };
     }
   }
 
-  private static async getThreadEmails(userId: string, threadId: string): Promise<Email[]> {
-    const { prisma } = await import('@/config/database');
-    return prisma.email.findMany({
-      where: {
-        userId,
-        threadId,
-      },
-      orderBy: {
-        date: 'asc',
-      },
-    });
-  }
-
-  private static extractThreadSubject(threadEmails: Email[]): string {
-    const firstEmail = threadEmails[0];
-    return firstEmail?.subject || '';
-  }
-
-  private static findPreviousCategory(threadEmails: Email[], currentEmailId: string): string | undefined {
-    const currentIndex = threadEmails.findIndex(email => email.id === currentEmailId);
+  private static fallbackCategory(email: any): string {
+    const subject = email.subject?.toLowerCase() || '';
+    const from = email.from?.toLowerCase() || '';
     
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      const email = threadEmails[i];
-      if (email.category) {
-        return email.category;
-      }
+    if (subject.includes('bill') || subject.includes('invoice') || subject.includes('payment')) {
+      return 'Bills';
     }
     
-    return undefined;
+    if (subject.includes('promotion') || subject.includes('sale') || subject.includes('discount') || 
+        from.includes('no-reply') || from.includes('noreply')) {
+      return 'Promotions';
+    }
+    
+    if (from.includes('linkedin') || from.includes('github') || from.includes('slack')) {
+      return 'Work';
+    }
+    
+    if (subject.includes('urgent') || subject.includes('important') || subject.includes('asap')) {
+      return 'Important';
+    }
+    
+    return 'Personal';
   }
 }

@@ -5,6 +5,7 @@ interface EmailFilters {
   dateFrom?: Date;
   dateTo?: Date;
   labels?: string[];
+  category?: string;
 }
 
 export class EmailQueryService {
@@ -41,6 +42,10 @@ export class EmailQueryService {
       where.labels = { hasSome: filters.labels };
     }
 
+    if (filters?.category) {
+      where.category = filters.category;
+    }
+
     const [emails, total] = await Promise.all([
       prisma.email.findMany({
         where,
@@ -59,6 +64,10 @@ export class EmailQueryService {
           date: true,
           labels: true,
           hasAttachments: true,
+          category: true,
+          categoryConfidence: true,
+          categoryDescription: true,
+          categorizedAt: true,
         },
       }),
       prisma.email.count({ where }),
@@ -89,10 +98,11 @@ export class EmailQueryService {
   }
 
   static async getUserEmailStats(userId: string) {
-    const [total, unread, withAttachments, syncState] = await Promise.all([
+    const [total, unread, withAttachments, categorized, syncState] = await Promise.all([
       prisma.email.count({ where: { userId } }),
       prisma.email.count({ where: { userId, isRead: false } }),
       prisma.email.count({ where: { userId, hasAttachments: true } }),
+      prisma.email.count({ where: { userId, category: { not: null } } }),
       prisma.syncState.findUnique({ where: { userId } }),
     ]);
 
@@ -103,6 +113,8 @@ export class EmailQueryService {
       total,
       unread,
       withAttachments,
+      categorized,
+      uncategorized: total - categorized,
       lastSyncAt,
       syncInProgress,
     };

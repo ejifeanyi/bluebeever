@@ -51,6 +51,10 @@ export const EmailSchema = z.object({
     size: z.number(),
     attachmentId: z.string(),
   })).optional(),
+  category: z.string().optional(),
+  categoryConfidence: z.number().optional(),
+  categoryDescription: z.string().optional(),
+  categorizedAt: z.date().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -66,6 +70,10 @@ export const ApiResponseSchema = z.object({
   data: z.unknown().optional(),
   error: z.string().optional(),
   message: z.string().optional(),
+});
+
+export const UpdateEmailCategorySchema = z.object({
+  category: z.string().min(1).max(50),
 });
 
 export enum SyncStrategy {
@@ -136,7 +144,25 @@ export const ParsedEmailSchema = z.object({
   updatedAt: z.date(),
 });
 
+export enum ERROR_CODES {
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  NOT_FOUND = 'NOT_FOUND',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  GMAIL_API_ERROR = 'GMAIL_API_ERROR',
+}
 
+export const createSuccessResponse = <T>(data?: T, message?: string) => ({
+  success: true,
+  data,
+  message,
+});
+
+export const createErrorResponse = (code: ERROR_CODES, message: string) => ({
+  success: false,
+  error: code,
+  message,
+});
 
 export type SyncStrategyType = 'quick' | 'full' | 'incremental';
 export type User = z.infer<typeof UserSchema>;
@@ -147,6 +173,7 @@ export type SyncEmails = z.infer<typeof SyncEmailsSchema>;
 export type EmailSyncJob = z.infer<typeof EmailSyncJobSchema>;
 export type EmailProcessingJob = z.infer<typeof EmailProcessingJobSchema>;
 export type ParsedEmail = z.infer<typeof ParsedEmailSchema>;
+export type UpdateEmailCategory = z.infer<typeof UpdateEmailCategorySchema>;
 export type ApiResponse<T = unknown> = {
   success: boolean;
   data?: T;

@@ -1,11 +1,10 @@
 import { Response } from 'express';
-import { createSuccessResponse, createErrorResponse, ERROR_CODES, SyncStrategy } from '@crate/shared';
+import { createSuccessResponse, createErrorResponse, SyncStrategy } from '@crate/shared';
+import { ERROR_CODES } from '@crate/shared';
 import { AuthenticatedRequest } from '@/middleware/auth';
 import { EmailSyncService } from '@/services/email-sync.service';
 import { EmailQueryService } from '@/services/email-query.service';
-
-console.log('SyncStrategy imported:', SyncStrategy);
-console.log('SyncStrategy.QUICK:', SyncStrategy?.QUICK);
+import { EmailCategoryService } from '@/services/email-category.service';
 
 export class EmailController {
   static async quickSync(req: AuthenticatedRequest, res: Response) {
@@ -17,7 +16,6 @@ export class EmailController {
       }
 
       const syncStrategy = SyncStrategy?.QUICK || 'quick';
-      console.log('Using sync strategy:', syncStrategy);
       
       const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Quick sync initiated - recent emails loading'));
@@ -36,7 +34,6 @@ export class EmailController {
       }
 
       const syncStrategy = SyncStrategy?.FULL || 'full';
-      console.log('Using sync strategy:', syncStrategy);
       
       const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Full sync initiated - importing all emails in background'));
@@ -55,7 +52,6 @@ export class EmailController {
       }
 
       const syncStrategy = SyncStrategy?.INCREMENTAL || 'incremental';
-      console.log('Using sync strategy:', syncStrategy);
       
       const result = await EmailSyncService.initiateSync(req.user.userId, syncStrategy as any);
       res.json(createSuccessResponse(result, 'Incremental sync initiated'));
@@ -112,12 +108,14 @@ export class EmailController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
       const search = req.query.search as string;
+      const category = req.query.category as string;
       
       const filters = {
         isRead: req.query.isRead ? req.query.isRead === 'true' : undefined,
         dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
         dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
         labels: req.query.labels ? (req.query.labels as string).split(',') : undefined,
+        category,
       };
 
       const result = await EmailQueryService.getUserEmails(
@@ -185,6 +183,62 @@ export class EmailController {
       console.error('Mark email as read error:', error);
       res.status(500).json(
         createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to mark email as read')
+      );
+    }
+  }
+
+  static async updateEmailCategory(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(
+          createErrorResponse(ERROR_CODES.UNAUTHORIZED, 'User not authenticated')
+        );
+      }
+
+      const { id } = req.params;
+      const { category } = req.body;
+
+      if (!category || typeof category !== 'string') {
+        return res.status(400).json(
+          createErrorResponse(ERROR_CODES.VALIDATION_ERROR, 'Category is required')
+        );
+      }
+
+      const result = await EmailCategoryService.updateEmailCategory(
+        req.user.userId,
+        id,
+        category
+      );
+
+      if (!result) {
+        return res.status(404).json(
+          createErrorResponse(ERROR_CODES.NOT_FOUND, 'Email not found')
+        );
+      }
+
+      res.json(createSuccessResponse(result, 'Email category updated'));
+    } catch (error) {
+      console.error('Update email category error:', error);
+      res.status(500).json(
+        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to update email category')
+      );
+    }
+  }
+
+  static async getCategories(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(
+          createErrorResponse(ERROR_CODES.UNAUTHORIZED, 'User not authenticated')
+        );
+      }
+
+      const categories = await EmailCategoryService.getUserCategories(req.user.userId);
+      res.json(createSuccessResponse(categories));
+    } catch (error) {
+      console.error('Get categories error:', error);
+      res.status(500).json(
+        createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to fetch categories')
       );
     }
   }
