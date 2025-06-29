@@ -16,7 +16,6 @@ embedding_cache = TTLCache(maxsize=settings.cache_size, ttl=settings.embedding_c
 
 # Import necessary types and classes
 from .schemas import CategorizationResponse, StandaloneEmailRequest
-from .models import Category
 from .vector_store import VectorStore
 from .thread_utils import ThreadUtils
 
