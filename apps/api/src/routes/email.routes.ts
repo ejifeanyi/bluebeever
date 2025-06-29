@@ -11,6 +11,7 @@ router.post('/sync/full', EmailController.fullSync);
 router.post('/sync/incremental', EmailController.incrementalSync);
 router.post('/sync/reset', EmailController.resetSync);
 router.get('/sync/status', EmailController.getSyncStatus);
+router.get('/search', EmailController.searchEmails);
 
 router.patch('/:id/read', EmailController.markEmailAsRead);
 router.patch('/:id/category', EmailController.updateEmailCategory);

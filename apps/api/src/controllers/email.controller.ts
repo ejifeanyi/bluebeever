@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '@/middleware/auth';
 import { EmailSyncService } from '@/services/email-sync.service';
 import { EmailQueryService } from '@/services/email-query.service';
 import { EmailCategoryService } from '@/services/email-category.service';
+import { prisma } from '@/config/database';
 
 export class EmailController {
   static async quickSync(req: AuthenticatedRequest, res: Response) {
@@ -222,6 +223,46 @@ export class EmailController {
       res.status(500).json(
         createErrorResponse(ERROR_CODES.INTERNAL_ERROR, 'Failed to update email category')
       );
+    }
+  }
+
+  static async searchEmails(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json(
+          createErrorResponse(ERROR_CODES.UNAUTHORIZED, 'User not authenticated')
+        );
+      }
+      const { subject, from, to, category, label, dateFrom, dateTo, isRead, q } = req.query;
+      const filters: any = {
+        userId: req.user.userId,
+        ...(subject && { subject: { contains: subject, mode: 'insensitive' } }),
+        ...(from && { from: { contains: from, mode: 'insensitive' } }),
+        ...(to && { to: { has: to } }),
+        ...(category && { category }),
+        ...(label && { labels: { has: label } }),
+        ...(isRead !== undefined && { isRead: isRead === 'true' }),
+        ...(dateFrom && { date: { gte: new Date(dateFrom as string) } }),
+        ...(dateTo && { date: { lte: new Date(dateTo as string) } }),
+      };
+
+      if (q) {
+        filters.OR = [
+          { subject: { contains: q, mode: 'insensitive' } },
+          { body: { contains: q, mode: 'insensitive' } },
+          { snippet: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+
+      const emails = await prisma.email.findMany({
+        where: filters,
+        orderBy: { date: 'desc' },
+        take: 50, // limit results
+      });
+
+      res.json(emails);
+    } catch (error) {
+      res.status(500).json({ error: 'Search failed', details: error });
     }
   }
 
