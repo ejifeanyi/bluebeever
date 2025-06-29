@@ -301,36 +301,65 @@ export class EmailSyncService {
     if (emails.length === 0) return [];
     
     try {
-      return await prisma.$transaction(
-        emails.map(email => prisma.email.create({ 
-          data: {
+      const results = await Promise.all(
+        emails.map(email => 
+          prisma.email.upsert({
+            where: { messageId: email.messageId },
+            update: {
+              updatedAt: new Date(),
+            },
+            create: {
+              ...email,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          })
+        )
+      );
+      
+      const newEmails = results.filter(email => 
+        email.createdAt.getTime() === email.updatedAt.getTime()
+      );
+      
+      console.log(`✅ Processed ${emails.length} emails: ${newEmails.length} new, ${results.length - newEmails.length} existing`);
+      return newEmails;
+      
+    } catch (error) {
+      console.error('Batch upsert error:', error);
+      return this.fallbackIndividualInsert(emails);
+    }
+  }
+
+  private static async fallbackIndividualInsert(emails: ParsedEmail[]) {
+    const successfulInserts: any[] = [];
+    
+    for (const email of emails) {
+      try {
+        const result = await prisma.email.upsert({
+          where: { messageId: email.messageId },
+          update: {
+            updatedAt: new Date(),
+          },
+          create: {
             ...email,
             id: email.id || crypto.randomUUID(),
             createdAt: new Date(),
             updatedAt: new Date(),
           }
-        }))
-      );
-    } catch (error) {
-      console.error('Batch insert error:', error);
-      const results = [];
-      for (const email of emails) {
-        try {
-          const saved = await prisma.email.create({ 
-            data: {
-              ...email,
-              id: email.id || crypto.randomUUID(),
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            }
-          });
-          results.push(saved);
-        } catch (individualError) {
-          console.error(`Failed to insert email ${email.messageId}:`, individualError);
+        });
+        
+        // Check if it's a new email
+        if (result.createdAt.getTime() === result.updatedAt.getTime()) {
+          successfulInserts.push(result);
         }
+      } catch (error) {
+        console.error(`Failed to insert email ${email.messageId}:`, error);
+        // Continue with other emails instead of failing completely
       }
-      return results;
     }
+    
+    console.log(`✅ Fallback processing: ${successfulInserts.length}/${emails.length} emails inserted successfully`);
+    return successfulInserts;
   }
 
   private static async queueEmailProcessing(emails: any[]) {
@@ -402,7 +431,6 @@ export class EmailSyncService {
 
     return {
       userId,
-      id: crypto.randomUUID(),
       threadId: message.threadId || message.id,
       messageId: message.id,
       subject,

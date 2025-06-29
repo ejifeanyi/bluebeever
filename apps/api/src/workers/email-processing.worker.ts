@@ -26,3 +26,7 @@ emailProcessingQueue.on('completed', (job, result) => {
 emailProcessingQueue.on('failed', (job, err) => {
   console.error(`Email processing job ${job.id} failed:`, err);
 });
+
+console.log('✅ Email processing worker is ready and listening for jobs');
+console.log('📊 Worker will process up to 5 concurrent jobs');
+console.log('🔄 Press Ctrl+C to stop the worker');

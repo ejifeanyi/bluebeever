@@ -120,7 +120,7 @@ export const EmailProcessingJobSchema = z.object({
 });
 
 export const ParsedEmailSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(),
   userId: z.string(),
   threadId: z.string(),
   messageId: z.string(),
