@@ -25,8 +25,8 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="flex items-center justify-between py-4 px-6 bg-background border-b border-border">
-      <div className="flex items-center gap-6">
+    <header className="flex items-center justify-between py-4 px-6 bg-background">
+      <div className="flex items-center gap-24">
         <div className="flex-shrink-0">
           <h1 className="text-xl font-bold text-primary tracking-tight">
             BlueBeever
