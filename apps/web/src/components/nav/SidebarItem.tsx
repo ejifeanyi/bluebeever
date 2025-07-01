@@ -1,41 +1,59 @@
-import React from "react";
+import { cn } from "@/lib/utils";
 
-type Props = {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+interface SidebarItemProps {
+  icon: React.ComponentType<{ className?: string }>;
   name: string;
   count?: number;
   active?: boolean;
-};
+  onClick?: () => void;
+}
 
-const SidebarItem = ({ icon: Icon, name, count, active = false }: Props) => {
+const SidebarItem: React.FC<SidebarItemProps> = ({
+  icon: Icon,
+  name,
+  count,
+  active = false,
+  onClick,
+}) => {
   return (
-    <div className="flex items-center w-full justify-between">
-      <div className="flex items-center">
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-all duration-200 group hover:bg-accent/50 cursor-pointer",
+        active && "bg-primary/10"
+      )}
+    >
+      <div className="flex items-center space-x-3">
         <Icon
-          className={`size-5 transition-colors ${
-            active ? "text-blueBeever-500" : "text-text-muted"
-          }`}
+          className={cn(
+            "h-4 w-4 transition-colors",
+            active
+              ? "text-primary"
+              : "text-muted-foreground group-hover:text-foreground"
+          )}
         />
         <span
-          className={`ml-3 text-md transition-colors ${
-            active ? "text-text-main" : "text-text-muted"
-          }`}
+          className={cn(
+            "font-medium transition-colors",
+            active
+              ? "text-foreground"
+              : "text-muted-foreground group-hover:text-foreground"
+          )}
         >
           {name}
         </span>
       </div>
-      {count !== undefined && (
+      {count !== undefined && count > 0 && (
         <span
-          className={`text-xs transition-all ${
-            active
-              ? "bg-blue-100 text-blue-700 rounded-full px-2 py-0.5"
-              : "text-text-muted"
-          }`}
+          className={cn(
+            "text-xs px-2 py-0.5 rounded-full transition-all",
+            active ? "bg-primary/10 text-primary" : "text-muted-foreground"
+          )}
         >
           {count}
         </span>
       )}
-    </div>
+    </button>
   );
 };
 
