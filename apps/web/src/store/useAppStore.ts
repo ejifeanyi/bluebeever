@@ -1,47 +1,40 @@
 import { create } from "zustand";
+import * as authApi from "@/api/auth";
 
-interface FetchParams {
-  url: string;
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  body?: any;
-  token?: string;
-  headers?: Record<string, string>;
-}
-
-interface AppState {
-  data: any;
+interface AuthState {
+  user: any;
   loading: boolean;
   error: string | null;
-  fetchData: (params: FetchParams) => Promise<void>;
+  fetchUser: () => Promise<void>;
+  refresh: () => Promise<void>;
+  logout: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  data: null,
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
   loading: false,
   error: null,
-  fetchData: async ({
-    url,
-    method = "GET",
-    body,
-    token,
-    headers = {},
-  }: FetchParams) => {
+  fetchUser: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...headers,
-        },
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      set({ data, loading: false });
+      const data = await authApi.getMe();
+      set({ user: data, loading: false });
     } catch (error: any) {
-      set({ error: error.message || "Unknown error", loading: false });
+      set({ error: error.message, loading: false, user: null });
     }
+  },
+  refresh: async () => {
+    set({ loading: true, error: null });
+    try {
+      await authApi.refreshToken();
+      const data = await authApi.getMe();
+      set({ user: data, loading: false });
+    } catch (error: any) {
+      set({ error: error.message, loading: false, user: null });
+    }
+  },
+  logout: () => {
+    authApi.logout();
+    set({ user: null });
   },
 }));

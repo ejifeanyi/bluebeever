@@ -1,13 +1,9 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
+import { signInWithGoogle } from "@/api/auth";
 
 const LoginPage: React.FC = () => {
-  const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:4000/api/auth/google";
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-lg p-5">
@@ -20,7 +16,7 @@ const LoginPage: React.FC = () => {
         </div>
         <div className="space-y-6">
           <button
-            onClick={handleGoogleLogin}
+            onClick={signInWithGoogle}
             className="w-full py-2 text-base font-medium flex items-center justify-center gap-2 cursor-pointer border border-accent rounded-lg"
           >
             <svg
