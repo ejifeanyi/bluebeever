@@ -3,10 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const HeaderSkeleton: React.FC = () => {
   return (
     <header className="flex items-center justify-between px-6 py-4 bg-background">
-      <div className="flex items-center space-x-3">
-        <Skeleton className="h-8 w-8 rounded-full" />
-        <Skeleton className="h-6 w-32" />
-      </div>
+      <Skeleton className="h-6 w-32" />
 
       <div className="flex-1 max-w-md ml-3 mr-8">
         <Skeleton className="h-10 w-full rounded-lg" />
