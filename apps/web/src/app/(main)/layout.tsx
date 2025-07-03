@@ -8,7 +8,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         // onSearch={(query) => console.log("Search:", query)}
         notificationCount={3}
         userName="Jane Smith"
-        userEmail="jane@company.com"
         userImage="/path/to/avatar.jpg"
       />
       <div className="flex">
