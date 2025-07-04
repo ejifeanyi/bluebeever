@@ -3,21 +3,15 @@ export interface Email {
   subject: string;
   from: string;
   to: string[];
+  cc?: string[];
+  bcc?: string[];
   date: string;
+  body: string;
   snippet: string;
-  body?: string;
   isRead: boolean;
   labels: string[];
-  category?: string;
-  userId: string;
-  gmailId: string;
-  threadId: string;
-  messageId: string;
-  inReplyTo?: string;
-  references?: string[];
   attachments?: EmailAttachment[];
-  createdAt: string;
-  updatedAt: string;
+  category?: string;
 }
 
 export interface EmailAttachment {
@@ -25,7 +19,7 @@ export interface EmailAttachment {
   filename: string;
   mimeType: string;
   size: number;
-  attachmentId: string;
+  data?: string;
 }
 
 export interface EmailListResponse {
@@ -44,6 +38,17 @@ export interface EmailFilters {
   category?: string;
 }
 
+export interface EmailStats {
+  inboxCount: number;
+  favoritesCount: number;
+  sentCount: number;
+  draftsCount: number;
+  spamCount: number;
+  archiveCount: number;
+  trashCount: number;
+  unreadCount: number;
+}
+
 export type EmailFolder =
   | "inbox"
   | "sent"
@@ -52,15 +57,3 @@ export type EmailFolder =
   | "trash"
   | "archive"
   | "favorites";
-
-export interface EmailStats {
-  totalEmails: number;
-  unreadCount: number;
-  inboxCount: number;
-  sentCount: number;
-  draftsCount: number;
-  spamCount: number;
-  trashCount: number;
-  archiveCount: number;
-  favoritesCount: number;
-}
