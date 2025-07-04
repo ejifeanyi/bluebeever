@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import SidebarItem from "./SidebarItem";
 import SidebarSection from "./SidebarSection";
 import {
@@ -14,6 +14,8 @@ import {
   Trash2,
 } from "lucide-react";
 import LabelItem from "./LabelItem";
+import { EmailFolder } from "@/types/email";
+import { useEmailStore } from "@/store/useEmailStore";
 
 interface Label {
   id: string;
@@ -23,7 +25,11 @@ interface Label {
 }
 
 const Sidebar: React.FC = () => {
-  const [activeItem, setActiveItem] = useState("inbox");
+  const { activeFolder, setActiveFolder, stats, loadStats } = useEmailStore();
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   const labels: Label[] = [
     { id: "1", name: "Work", color: "#3b82f6", count: 12 },
@@ -35,14 +41,58 @@ const Sidebar: React.FC = () => {
   ];
 
   const mainItems = [
-    { id: "inbox", icon: Inbox, name: "Inbox", count: 3 },
-    { id: "favorites", icon: Star, name: "Favorites", count: 7 },
-    { id: "sent", icon: Send, name: "Sent" },
-    { id: "drafts", icon: FileText, name: "Drafts", count: 2 },
-    { id: "spam", icon: AlertTriangle, name: "Spam", count: 15 },
-    { id: "archive", icon: Archive, name: "Archive" },
-    { id: "trash", icon: Trash2, name: "Trash", count: 4 },
+    {
+      id: "inbox" as EmailFolder,
+      icon: Inbox,
+      name: "Inbox",
+      count: stats?.inboxCount || 0,
+    },
+    {
+      id: "favorites" as EmailFolder,
+      icon: Star,
+      name: "Favorites",
+      count: stats?.favoritesCount || 0,
+    },
+    {
+      id: "sent" as EmailFolder,
+      icon: Send,
+      name: "Sent",
+      count: stats?.sentCount || 0,
+    },
+    {
+      id: "drafts" as EmailFolder,
+      icon: FileText,
+      name: "Drafts",
+      count: stats?.draftsCount || 0,
+    },
+    {
+      id: "spam" as EmailFolder,
+      icon: AlertTriangle,
+      name: "Spam",
+      count: stats?.spamCount || 0,
+    },
+    {
+      id: "archive" as EmailFolder,
+      icon: Archive,
+      name: "Archive",
+      count: stats?.archiveCount || 0,
+    },
+    {
+      id: "trash" as EmailFolder,
+      icon: Trash2,
+      name: "Trash",
+      count: stats?.trashCount || 0,
+    },
   ];
+
+  const handleFolderClick = (folderId: EmailFolder) => {
+    setActiveFolder(folderId);
+  };
+
+  const handleLabelClick = (labelId: string) => {
+    // TODO: Implement label filtering when categories are implemented
+    console.log("Label clicked:", labelId);
+  };
 
   return (
     <aside className="w-50 h-screen flex flex-col">
@@ -54,8 +104,8 @@ const Sidebar: React.FC = () => {
               icon={item.icon}
               name={item.name}
               count={item.count}
-              active={activeItem === item.id}
-              onClick={() => setActiveItem(item.id)}
+              active={activeFolder === item.id}
+              onClick={() => handleFolderClick(item.id)}
             />
           ))}
         </SidebarSection>
@@ -64,8 +114,8 @@ const Sidebar: React.FC = () => {
           <SidebarItem
             icon={Folder}
             name="All Categories"
-            active={activeItem === "categories"}
-            onClick={() => setActiveItem("categories")}
+            active={activeFolder === "inbox" && false}
+            onClick={() => console.log("Categories to be implemented")}
           />
         </SidebarSection>
 
@@ -74,8 +124,8 @@ const Sidebar: React.FC = () => {
             <LabelItem
               key={label.id}
               label={label}
-              active={activeItem === `label-${label.id}`}
-              onClick={() => setActiveItem(`label-${label.id}`)}
+              active={false}
+              onClick={() => handleLabelClick(label.id)}
             />
           ))}
         </SidebarSection>

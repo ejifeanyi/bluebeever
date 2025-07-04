@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
 import { useAuthStore } from "@/store/useAppStore";
 import LoadingLayout from "@/components/skeletons/LoadingLayout";
 import Header from "@/components/nav/Header";
@@ -11,22 +12,41 @@ import { Skeleton } from "@/components/ui/skeleton";
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
   const { user, loading, fetchUser } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const token = Cookies.get("token");
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
     if (!user && !loading) {
       fetchUser();
     }
     // eslint-disable-next-line
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
+    if (!mounted) return;
+
     if (!loading && !user) {
-      router.replace("/login");
+      const token = Cookies.get("token");
+      if (!token) {
+        router.replace("/login");
+      }
     }
     // eslint-disable-next-line
-  }, [loading, user, router]);
+  }, [loading, user, router, mounted]);
 
-  if (loading || !user) {
+  if (!mounted || loading || (mounted && Cookies.get("token") && !user)) {
     return (
       <LoadingLayout>
         <div className="space-y-6 p-6">
@@ -41,6 +61,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
       </LoadingLayout>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
