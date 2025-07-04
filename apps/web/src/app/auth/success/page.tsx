@@ -17,7 +17,7 @@ export default function AuthSuccess() {
     if (token) {
       Cookies.set("token", token, { secure: true, sameSite: "strict" });
       fetchUser().finally(() => {
-        router.replace("/dashboard");
+        router.replace("/inbox");
       });
     } else {
       router.replace("/login?error=missing_token");
