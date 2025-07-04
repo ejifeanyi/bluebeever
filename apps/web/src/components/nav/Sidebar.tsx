@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import SidebarItem from "./SidebarItem";
 import SidebarSection from "./SidebarSection";
 import {
@@ -25,7 +26,9 @@ interface Label {
 }
 
 const Sidebar: React.FC = () => {
-  const { activeFolder, setActiveFolder, stats, loadStats } = useEmailStore();
+  const { activeFolder, stats, loadStats } = useEmailStore();
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     loadStats();
@@ -46,53 +49,61 @@ const Sidebar: React.FC = () => {
       icon: Inbox,
       name: "Inbox",
       count: stats?.inboxCount || 0,
+      path: "/inbox",
     },
     {
       id: "favorites" as EmailFolder,
       icon: Star,
       name: "Favorites",
       count: stats?.favoritesCount || 0,
+      path: "/favorites",
     },
     {
       id: "sent" as EmailFolder,
       icon: Send,
       name: "Sent",
       count: stats?.sentCount || 0,
+      path: "/sent",
     },
     {
       id: "drafts" as EmailFolder,
       icon: FileText,
       name: "Drafts",
       count: stats?.draftsCount || 0,
+      path: "/drafts",
     },
     {
       id: "spam" as EmailFolder,
       icon: AlertTriangle,
       name: "Spam",
       count: stats?.spamCount || 0,
+      path: "/spam",
     },
     {
       id: "archive" as EmailFolder,
       icon: Archive,
       name: "Archive",
       count: stats?.archiveCount || 0,
+      path: "/archive",
     },
     {
       id: "trash" as EmailFolder,
       icon: Trash2,
       name: "Trash",
       count: stats?.trashCount || 0,
+      path: "/trash",
     },
   ];
 
-  const handleFolderClick = (folderId: EmailFolder) => {
-    setActiveFolder(folderId);
+  const handleFolderClick = (path: string) => {
+    router.push(path);
   };
 
   const handleLabelClick = (labelId: string) => {
-    // TODO: Implement label filtering when categories are implemented
     console.log("Label clicked:", labelId);
   };
+
+  const isActive = (path: string) => pathname === path;
 
   return (
     <aside className="w-50 h-screen flex flex-col">
@@ -104,8 +115,8 @@ const Sidebar: React.FC = () => {
               icon={item.icon}
               name={item.name}
               count={item.count}
-              active={activeFolder === item.id}
-              onClick={() => handleFolderClick(item.id)}
+              active={isActive(item.path)}
+              onClick={() => handleFolderClick(item.path)}
             />
           ))}
         </SidebarSection>
@@ -114,7 +125,7 @@ const Sidebar: React.FC = () => {
           <SidebarItem
             icon={Folder}
             name="All Categories"
-            active={activeFolder === "inbox" && false}
+            active={false}
             onClick={() => console.log("Categories to be implemented")}
           />
         </SidebarSection>
