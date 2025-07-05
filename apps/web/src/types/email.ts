@@ -7,6 +7,7 @@ export interface Email {
   bcc?: string[];
   date: string;
   body: string;
+  avatarUrl?: string;
   snippet: string;
   isRead: boolean;
   labels: string[];
