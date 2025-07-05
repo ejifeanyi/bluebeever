@@ -78,9 +78,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <Sidebar />
         <main className="flex-1 overflow-hidden">
           <div className="h-full p-6">
-            <div className="h-full bg-card rounded-lg border shadow-sm p-6">
-              {children}
-            </div>
+            <div className="h-full">{children}</div>
           </div>
         </main>
       </div>

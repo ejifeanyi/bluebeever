@@ -47,7 +47,7 @@ export function EmailList() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
-        <div className="divide-y">
+        <div className="divide-y space-y-7 mt-5">
           {emails.map((email) => (
             <EmailItem key={email.id} email={email} />
           ))}

@@ -43,32 +43,16 @@ const MailPage = ({ folder }: MailPageProps) => {
   };
 
   return (
-    <div className="flex h-full">
-      <div
-        className={`${selectedEmail ? "w-1/2" : "w-full"} border-r border-border transition-all duration-300`}
-      >
-        <div className="p-6 border-b border-border">
-          <h1 className="text-2xl font-bold">{getFolderTitle(folder)}</h1>
-        </div>
-        <EmailList />
+    <div className="h-full w-130 flex flex-col border border-accent px-6 py-7 rounded-4xl overflow-y-auto">
+      <div className="flex items-baseline mb-3 gap-3">
+        <h1 className="text-2xl font-bold text-accent-foreground">
+          {getFolderTitle(folder)}
+        </h1>
+        <span className="text-accent-foreground/50 text-xs">
+          (200 Messages, 10 Unread)
+        </span>
       </div>
-
-      {selectedEmail && (
-        <div className="w-1/2 flex flex-col">
-          <div className="flex items-center justify-between p-4 border-b border-border">
-            <h2 className="text-lg font-semibold">Email Details</h2>
-            <button
-              onClick={handleCloseEmail}
-              className="p-2 hover:bg-accent rounded-lg transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <EmailView email={selectedEmail} />
-          </div>
-        </div>
-      )}
+      <EmailList />
     </div>
   );
 };

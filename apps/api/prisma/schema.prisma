@@ -32,6 +32,7 @@ model Email {
   threadId            String
   messageId           String    @unique
   subject             String
+  avatarUrl           String?
   from                String
   to                  String[]
   cc                  String[]
