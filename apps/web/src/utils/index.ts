@@ -4,7 +4,8 @@ import { enUS } from "date-fns/locale";
 const customLocale = {
   ...enUS,
   formatDistance: (token: string, count: number, options: any) => {
-    let result = enUS.formatDistance(token, count, options);
+    // Cast token to FormatDistanceToken to satisfy the type checker
+    let result = enUS.formatDistance(token as any, count, options);
     return result.replace(/^about /, "");
   },
 };
