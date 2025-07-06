@@ -55,7 +55,7 @@ export function EmailItem({ email }: EmailItemProps) {
           </div>
         </div>
         <div className="flex items-center justify-end space-x-2">
-          <span className="text-xs text-accent-foreground/50 text-right">
+          <span className="text-xs text-accent-foreground/20 text-right">
             {formatDate(email.date)}
           </span>
         </div>

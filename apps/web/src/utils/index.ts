@@ -1,4 +1,13 @@
 import { formatDistanceToNow } from "date-fns";
+import { enUS } from "date-fns/locale";
+
+const customLocale = {
+  ...enUS,
+  formatDistance: (token: string, count: number, options: any) => {
+    let result = enUS.formatDistance(token, count, options);
+    return result.replace(/^about /, "");
+  },
+};
 
 export const truncateText = (text: string, maxLength: number) => {
   if (text.length <= maxLength) return text;
@@ -22,7 +31,7 @@ export const getSenderNameInitials = (from: string) => {
 export const formatDate = (dateString: string) => {
   try {
     const date = new Date(dateString);
-    return formatDistanceToNow(date, { addSuffix: true });
+    return formatDistanceToNow(date, { addSuffix: true, locale: customLocale });
   } catch {
     return "Unknown date";
   }
