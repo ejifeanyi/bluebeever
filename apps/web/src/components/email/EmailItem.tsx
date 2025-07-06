@@ -31,7 +31,7 @@ export function EmailItem({ email }: EmailItemProps) {
       className={cn(
         "flex flex-col space-y-3 rounded-md py-2 px-3 cursor-pointer transition-colors ease-in-out",
         !email.isRead ? "bg-background font-medium" : "",
-        "hover:bg-accent/50 hover:font-semibold"
+        "hover:bg-accent/50"
       )}
       onClick={handleClick}
     >
@@ -41,6 +41,7 @@ export function EmailItem({ email }: EmailItemProps) {
             <AvatarImage
               src={email.avatarUrl}
               alt={getSenderName(email.from)}
+              className="object-cover"
             />
             <AvatarFallback>{getSenderNameInitials(email.from)}</AvatarFallback>
           </Avatar>
@@ -49,7 +50,7 @@ export function EmailItem({ email }: EmailItemProps) {
               {getSenderName(email.from)}
             </span>
             <span className="text-accent-foreground/70 text-xs font-medium">
-              {truncateText(email.subject, 55)}
+              {truncateText(email.subject, 50)}
             </span>
           </div>
         </div>
@@ -62,7 +63,7 @@ export function EmailItem({ email }: EmailItemProps) {
 
       <div className="flex items-center space-x-3 justify-between w-full pl-11">
         <span
-          className={`text-sm ${email.isRead ? "text-accent-foreground/70" : "text-accent-foreground font-medium"}`}
+          className={`text-sm ${email.isRead ? "text-accent-foreground/70" : "text-accent-foreground"}`}
         >
           {truncateText(email.snippet, 100)}
         </span>
