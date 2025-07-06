@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useEmailStore } from "@/store/useEmailStore";
 import { Email } from "@/types/email";
 import { Star } from "lucide-react";
@@ -16,7 +15,6 @@ interface EmailItemProps {
 }
 
 export function EmailItem({ email }: EmailItemProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const { markAsRead, loadEmailById } = useEmailStore();
 
   const handleClick = async () => {
@@ -31,11 +29,10 @@ export function EmailItem({ email }: EmailItemProps) {
   return (
     <div
       className={cn(
-        "flex flex-col space-y-3 hover:bg-accent/50 rounded-md py-2 px-3 cursor-pointer transition-colors ease-in-out",
-        !email.isRead && "bg-background font-medium"
+        "flex flex-col space-y-3 rounded-md py-2 px-3 cursor-pointer transition-colors ease-in-out",
+        !email.isRead ? "bg-background font-medium" : "",
+        "hover:bg-accent/50 hover:font-semibold"
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
     >
       <div className="flex items-center justify-between space-x-3 w-full">

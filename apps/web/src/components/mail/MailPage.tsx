@@ -4,19 +4,22 @@ import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useEmailStore } from "@/store/useEmailStore";
 import { EmailList } from "@/components/email/EmailList";
-import { EmailView } from "@/components/email/EmailView";
 import { EmailFolder } from "@/types/email";
-import { X } from "lucide-react";
 
 interface MailPageProps {
   folder: EmailFolder;
 }
 
 const MailPage = ({ folder }: MailPageProps) => {
-  const { selectedEmail, activeFolder, setActiveFolder, loadEmails } =
-    useEmailStore();
-  const router = useRouter();
-  const pathname = usePathname();
+  const {
+    activeFolder,
+    setActiveFolder,
+    loadEmails,
+    emails,
+    totalCount,
+  } = useEmailStore();
+
+  const unreadCount = emails.filter((email) => !email.isRead).length;
 
   useEffect(() => {
     if (activeFolder !== folder) {
@@ -24,10 +27,6 @@ const MailPage = ({ folder }: MailPageProps) => {
       loadEmails();
     }
   }, [folder, activeFolder, setActiveFolder, loadEmails]);
-
-  const handleCloseEmail = () => {
-    useEmailStore.setState({ selectedEmail: null });
-  };
 
   const getFolderTitle = (folder: EmailFolder) => {
     const titles: Record<EmailFolder, string> = {
@@ -49,7 +48,7 @@ const MailPage = ({ folder }: MailPageProps) => {
           {getFolderTitle(folder)}
         </h1>
         <span className="text-accent-foreground/50 text-xs">
-          (200 Messages, 10 Unread)
+          ({totalCount} Messages, {unreadCount} Unread)
         </span>
       </div>
       <EmailList />
