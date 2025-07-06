@@ -28,9 +28,11 @@ const Header: React.FC<HeaderProps> = ({
     <header className="flex items-center justify-between py-4 px-6 bg-background">
       <div className="flex items-center gap-24">
         <div className="flex-shrink-0">
-          <h1 className="text-xl font-bold text-primary tracking-tight">
-            BlueBeever
-          </h1>
+          <img
+            src="BlueBeever-logo-full.svg"
+            alt="BlueBeever Logo"
+            className="object-contain w-32 h-full"
+          />
         </div>
 
         <div className="relative w-96">

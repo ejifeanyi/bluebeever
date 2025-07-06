@@ -42,12 +42,12 @@ export function EmailItem({ email }: EmailItemProps) {
         <div className="flex items-center space-x-2 flex-1">
           <Avatar>
             <AvatarImage
-              src={email.avatarUrl || "https://via.placeholder.com/150"}
+              src={email.avatarUrl}
               alt={getSenderName(email.from)}
             />
             <AvatarFallback>{getSenderNameInitials(email.from)}</AvatarFallback>
           </Avatar>
-        <div className="flex flex-col space-y-1">
+          <div className="flex flex-col space-y-1">
             <span className="text-accent-foreground text-sm font-medium">
               {getSenderName(email.from)}
             </span>
