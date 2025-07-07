@@ -79,22 +79,16 @@ export function EmailItem({ email }: EmailItemProps) {
         <span
           className={`text-sm ${email.isRead ? "text-accent-foreground/70" : "text-accent-foreground"}`}
         >
-          {truncateText(email.snippet, 100)}
+          {truncateText(email.snippet, 90)}
         </span>
         <div className="flex items-center justify-end space-x-2">
           <Star
             className={`h-4 w-4 ${isStarred ? "text-yellow-400" : "text-accent-foreground/50"}`}
           />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between space-x-1">
-        <div>{/* TODO: add categories */}</div>
-        <div className="flex items-center justify-end">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-accent-foreground/50"
+            className="h-8 w-8 text-accent-foreground/50 cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               setIsCategoryModalOpen(true);
