@@ -15,9 +15,15 @@ import { useState } from "react";
 
 interface EmailItemProps {
   email: Email;
+  onEmailSelect?: (emailId: string) => void;
+  selectedEmailId?: string | null;
 }
 
-export function EmailItem({ email }: EmailItemProps) {
+export function EmailItem({
+  email,
+  onEmailSelect,
+  selectedEmailId,
+}: EmailItemProps) {
   const { markAsRead, loadEmailById } = useEmailStore();
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
@@ -36,16 +42,21 @@ export function EmailItem({ email }: EmailItemProps) {
       await markAsRead(email.id);
     }
     await loadEmailById(email.id);
+
+    if (onEmailSelect) {
+      onEmailSelect(email.id);
+    }
   };
 
   const isStarred = email.labels.includes("STARRED");
+  const isSelected = selectedEmailId === email.id;
 
   return (
     <div
       className={cn(
         "flex flex-col space-y-3 rounded-md py-2 px-3 cursor-pointer transition-colors ease-in-out",
         !email.isRead ? "bg-background font-medium" : "",
-        "hover:bg-accent/50"
+        isSelected ? "bg-primary/10 border-primary/20" : "hover:bg-accent/50"
       )}
       onClick={handleClick}
     >

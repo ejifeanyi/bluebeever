@@ -10,9 +10,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MailPageProps {
   folder: EmailFolder;
+  onEmailSelect?: (emailId: string) => void;
+  selectedEmailId?: string | null;
 }
 
-const MailPage = ({ folder }: MailPageProps) => {
+const MailPage = ({
+  folder,
+  onEmailSelect,
+  selectedEmailId,
+}: MailPageProps) => {
   const {
     activeFolder,
     setActiveFolder,
@@ -95,10 +101,12 @@ const MailPage = ({ folder }: MailPageProps) => {
           >
             <ChevronRight className="h-4 w-4 text-accent-foreground/60" />
           </Button>
-          {/* TODO: filter */}
         </div>
       </div>
-      <EmailList />
+      <EmailList
+        onEmailSelect={onEmailSelect}
+        selectedEmailId={selectedEmailId}
+      />
     </div>
   );
 };

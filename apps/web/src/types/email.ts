@@ -6,7 +6,7 @@ export interface Email {
   cc?: string[];
   bcc?: string[];
   date: string;
-  body: string;
+  body: string | Email[]; // Allow body to be either string or Email[] for threading
   avatarUrl?: string;
   snippet: string;
   isRead: boolean;

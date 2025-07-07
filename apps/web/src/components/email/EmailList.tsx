@@ -4,7 +4,12 @@ import { Loader2 } from "lucide-react";
 import { EmailItem } from "./EmailItem";
 import { EmailPagination } from "./EmailPagination";
 
-export function EmailList() {
+interface EmailListProps {
+  onEmailSelect?: (emailId: string) => void;
+  selectedEmailId?: string | null;
+}
+
+export function EmailList({ onEmailSelect, selectedEmailId }: EmailListProps) {
   const { emails, loading, error, activeFolder, loadEmails, clearError } =
     useEmailStore();
 
@@ -49,12 +54,15 @@ export function EmailList() {
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y space-y-7 mt-5">
           {emails.map((email) => (
-            <EmailItem key={email.id} email={email} />
+            <EmailItem
+              key={email.id}
+              email={email}
+              onEmailSelect={onEmailSelect}
+              selectedEmailId={selectedEmailId}
+            />
           ))}
         </div>
       </div>
-
-      <EmailPagination />
     </div>
   );
 }

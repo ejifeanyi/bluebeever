@@ -112,6 +112,7 @@ export async function fetchEmailById(id: string): Promise<Email> {
   }
   
   const data = await response.json();
+  console.log("data mail: ", data)
   return data.data;
 }
 
