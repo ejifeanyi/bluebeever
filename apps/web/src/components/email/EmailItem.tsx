@@ -1,6 +1,6 @@
 import { useEmailStore } from "@/store/useEmailStore";
 import { Email } from "@/types/email";
-import { Star } from "lucide-react";
+import { EllipsisVertical, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
@@ -9,6 +9,9 @@ import {
   getSenderNameInitials,
   truncateText,
 } from "@/utils";
+import { Button } from "../ui/button";
+import CategoryModal from "../modal/CategoryModal";
+import { useState } from "react";
 
 interface EmailItemProps {
   email: Email;
@@ -16,6 +19,17 @@ interface EmailItemProps {
 
 export function EmailItem({ email }: EmailItemProps) {
   const { markAsRead, loadEmailById } = useEmailStore();
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  const categories = email.labels || [];
+
+  const handleSelectCategory = (category: string) => {
+    setIsCategoryModalOpen(false);
+  };
+
+  const handleCreateCategory = (category: string) => {
+    setIsCategoryModalOpen(false);
+  };
 
   const handleClick = async () => {
     if (!email.isRead) {
@@ -74,7 +88,30 @@ export function EmailItem({ email }: EmailItemProps) {
         </div>
       </div>
 
-      <div>{/* TODO: add categories */}</div>
+      <div className="flex items-center justify-between space-x-1">
+        <div>{/* TODO: add categories */}</div>
+        <div className="flex items-center justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-accent-foreground/50"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCategoryModalOpen(true);
+            }}
+          >
+            <EllipsisVertical className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onSelectCategory={handleSelectCategory}
+        currentCategory={email.category}
+        categories={categories}
+        onCreateCategory={handleCreateCategory}
+      />
     </div>
   );
 }
