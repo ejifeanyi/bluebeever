@@ -24,12 +24,14 @@ export async function fetchEmails({
   folder,
   search,
   filters,
+  signal,
 }: {
   page?: number;
   limit?: number;
   folder?: EmailFolder;
   search?: string;
   filters?: EmailFilters;
+  signal?: AbortSignal;
 }): Promise<EmailListResponse> {
   const params = new URLSearchParams();
 
@@ -49,6 +51,7 @@ export async function fetchEmails({
 
   const response = await fetch(url, {
     headers: getAuthHeaders(),
+    signal,
   });
 
   if (!response.ok) {
@@ -86,12 +89,14 @@ export async function fetchEmailsByCategory({
   limit = 20,
   search,
   filters,
+  signal,
 }: {
   category: string;
   page?: number;
   limit?: number;
   search?: string;
   filters?: Omit<EmailFilters, "category">;
+  signal?: AbortSignal;
 }): Promise<EmailListResponse> {
   const params = new URLSearchParams();
 
@@ -109,25 +114,68 @@ export async function fetchEmailsByCategory({
   const encodedCategory = encodeURIComponent(category);
   const url = `${API_URL}/emails/category/${encodedCategory}?${params.toString()}`;
 
-  const response = await fetch(url, {
-    headers: getAuthHeaders(),
-  });
+  let retries = 3;
+  let delay = 1000;
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch emails for category: ${category}`);
+  while (retries > 0) {
+    try {
+      const response = await fetch(url, {
+        headers: getAuthHeaders(),
+        signal,
+      });
+
+      if (!response.ok) {
+        if (response.status >= 500 && retries > 1) {
+          console.warn(
+            `Server error (${response.status}), retrying in ${delay}ms...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2;
+          retries--;
+          continue;
+        }
+
+        console.error("Response failed:");
+        console.error("Status:", response.status);
+        console.error("Status Text:", response.statusText);
+        console.error("URL:", url);
+        console.error("Category:", category);
+
+        throw new Error(
+          `HTTP ${response.status}: Failed to fetch emails for category: ${category}`
+        );
+      }
+
+      const data = await response.json();
+      console.log(`Fetched emails for category ${category}:`, data);
+
+      return {
+        emails: data.data?.emails || [],
+        page: data.data?.page || page,
+        totalPages: data.data?.totalPages || 1,
+        totalCount: data.data?.totalCount || 0,
+        hasMore: data.data?.hasMore || false,
+      };
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        throw error;
+      }
+
+      if (retries > 1) {
+        console.warn(`Network error, retrying in ${delay}ms...`, error);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2;
+        retries--;
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  const data = await response.json();
-
-  console.log(`Fetched emails for category ${category}:`, data);
-
-  return {
-    emails: data.data?.emails || [],
-    page: data.data?.page || page,
-    totalPages: data.data?.totalPages || 1,
-    totalCount: data.data?.totalCount || 0,
-    hasMore: data.data?.hasMore || false,
-  };
+  throw new Error(
+    `Failed to fetch emails for category: ${category} after retries`
+  );
 }
 
 function filterEmailsByFolder(emails: Email[], folder: EmailFolder): Email[] {

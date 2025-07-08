@@ -36,38 +36,13 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
   const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(
     new Set()
   );
-  const [hasUpdatedUrl, setHasUpdatedUrl] = useState(false);
-  const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (emailId) {
       loadEmailById(emailId);
       markAsRead(emailId);
-
-      if (!hasUpdatedUrl && !pathname.endsWith(emailId)) {
-        const pathParts = pathname.split("/").filter(Boolean);
-
-        const cleanPathParts = pathParts.filter(
-          (part) =>
-            !part.match(
-              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-            )
-        );
-
-        const newPath = `/${cleanPathParts.join("/")}/${emailId}`;
-
-        if (window.location.pathname !== newPath) {
-          window.history.pushState({}, "", newPath);
-          setHasUpdatedUrl(true);
-        }
-      }
     }
-  }, [emailId, loadEmailById, markAsRead, pathname, hasUpdatedUrl]);
-
-  useEffect(() => {
-    setHasUpdatedUrl(false);
-  }, [emailId]);
+  }, [emailId, loadEmailById, markAsRead]);
 
   if (!emailId) {
     return (

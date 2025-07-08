@@ -49,7 +49,11 @@ const MailPage = ({
       return activeCategory;
     }
 
-    const titles: Record<EmailFolder, string> = {
+    if (!folder) {
+      return "All Mail";
+    }
+
+    const titles: Record<Exclude<EmailFolder, null>, string> = {
       inbox: "Inbox",
       favorites: "Favorites",
       sent: "Sent",

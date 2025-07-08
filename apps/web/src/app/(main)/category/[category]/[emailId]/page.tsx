@@ -11,7 +11,8 @@ const CategoryEmailDetailPage = () => {
   const router = useRouter();
   const categoryName = decodeURIComponent(params.category as string);
   const emailId = params.emailId as string;
-  const { setActiveCategory, activeCategory, loadEmails } = useEmailStore();
+  const { setActiveCategory, activeCategory, loadEmails, setActiveFolder } =
+    useEmailStore();
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(
     emailId
   );
@@ -19,9 +20,16 @@ const CategoryEmailDetailPage = () => {
   useEffect(() => {
     if (categoryName && activeCategory !== categoryName) {
       setActiveCategory(categoryName);
+      setActiveFolder(null);
       loadEmails();
     }
-  }, [categoryName, activeCategory, setActiveCategory, loadEmails]);
+  }, [
+    categoryName,
+    activeCategory,
+    setActiveCategory,
+    setActiveFolder,
+    loadEmails,
+  ]);
 
   useEffect(() => {
     if (emailId) {
@@ -30,10 +38,12 @@ const CategoryEmailDetailPage = () => {
   }, [emailId]);
 
   const handleEmailSelect = (newEmailId: string) => {
+    setSelectedEmailId(newEmailId);
     router.push(`/category/${encodeURIComponent(categoryName)}/${newEmailId}`);
   };
 
   const handleBackToList = () => {
+    setSelectedEmailId(null);
     router.push(`/category/${encodeURIComponent(categoryName)}`);
   };
 

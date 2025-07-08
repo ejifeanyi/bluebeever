@@ -57,7 +57,8 @@ export type EmailFolder =
   | "spam"
   | "trash"
   | "archive"
-  | "favorites";
+  | "favorites"
+  | null;
 
 export interface Category {
   name: string | null;

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEmailStore } from "@/store/useEmailStore";
 import MailPage from "@/components/mail/MailPage";
 import EmailViewer from "@/components/mail/EmailViewer";
 
 const CategoryPage = () => {
   const params = useParams();
+  const router = useRouter();
   const categoryName = decodeURIComponent(params.category as string);
   const { setActiveCategory, activeCategory, loadEmails } = useEmailStore();
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
@@ -21,10 +22,12 @@ const CategoryPage = () => {
 
   const handleEmailSelect = (emailId: string) => {
     setSelectedEmailId(emailId);
+    router.push(`/category/${encodeURIComponent(categoryName)}/${emailId}`);
   };
 
   const handleBackToList = () => {
     setSelectedEmailId(null);
+    router.push(`/category/${encodeURIComponent(categoryName)}`);
   };
 
   return (

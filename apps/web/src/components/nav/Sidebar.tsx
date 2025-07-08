@@ -116,13 +116,20 @@ const Sidebar: React.FC = () => {
 
   const handleCategoryClick = (categoryName: string) => {
     setActiveCategory(categoryName);
+    setActiveFolder(null);
     router.push(`/category/${encodeURIComponent(categoryName)}`);
   };
 
   const isActive = (path: string) => pathname === path && !activeCategory;
-  const isCategoryActive = (categoryName: string) =>
-    activeCategory === categoryName &&
-    pathname === `/category/${encodeURIComponent(categoryName)}`;
+
+  const isCategoryActive = (categoryName: string) => {
+    if (!activeCategory) return false;
+    const encodedCategory = encodeURIComponent(categoryName);
+    return (
+      pathname.startsWith(`/category/${encodedCategory}`) &&
+      activeCategory === categoryName
+    );
+  };
 
   return (
     <aside className="w-50 h-screen flex flex-col">

@@ -22,6 +22,7 @@ interface EmailStore {
   totalPages: number;
   totalCount: number;
   hasMore: boolean;
+  abortController: AbortController | null;
 
   loadEmails: () => Promise<void>;
   loadCategories: () => Promise<void>;
@@ -48,10 +49,22 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   totalPages: 1,
   totalCount: 0,
   hasMore: false,
+  abortController: null,
 
   loadEmails: async () => {
     const { activeFolder, activeCategory, page } = get();
-    set({ loading: true, error: null });
+
+    const { abortController } = get();
+    if (abortController) {
+      abortController.abort();
+    }
+
+    const newAbortController = new AbortController();
+    set({
+      loading: true,
+      error: null,
+      abortController: newAbortController,
+    });
 
     try {
       let response;
@@ -61,13 +74,19 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
           category: activeCategory,
           page,
           limit: 20,
+          signal: newAbortController.signal,
         });
       } else {
         response = await fetchEmails({
           page,
           folder: activeFolder,
           limit: 20,
+          signal: newAbortController.signal,
         });
+      }
+
+      if (newAbortController.signal.aborted) {
+        return;
       }
 
       console.log("Loaded emails:", response.emails);
@@ -78,26 +97,48 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         totalCount: response.totalCount,
         hasMore: response.hasMore,
         loading: false,
+        abortController: null,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        return;
+      }
+
       console.error("Failed to load emails:", error);
       set({
         error: "Failed to load emails",
         loading: false,
+        abortController: null,
       });
     }
   },
 
   loadEmailsByCategory: async (category: string) => {
     const { page } = get();
-    set({ loading: true, error: null });
+
+    const { abortController } = get();
+    if (abortController) {
+      abortController.abort();
+    }
+
+    const newAbortController = new AbortController();
+    set({
+      loading: true,
+      error: null,
+      abortController: newAbortController,
+    });
 
     try {
       const response = await fetchEmailsByCategory({
         category,
         page,
         limit: 20,
+        signal: newAbortController.signal,
       });
+
+      if (newAbortController.signal.aborted) {
+        return;
+      }
 
       console.log(`Loaded emails for category ${category}:`, response.emails);
 
@@ -109,12 +150,18 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         activeCategory: category,
         activeFolder: "inbox",
         loading: false,
+        abortController: null,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        return;
+      }
+
       console.error(`Failed to load emails for category ${category}:`, error);
       set({
         error: `Failed to load emails for category: ${category}`,
         loading: false,
+        abortController: null,
       });
     }
   },
