@@ -80,6 +80,56 @@ export async function fetchEmails({
   };
 }
 
+export async function fetchEmailsByCategory({
+  category,
+  page = 1,
+  limit = 20,
+  search,
+  filters,
+}: {
+  category: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  filters?: Omit<EmailFilters, "category">;
+}): Promise<EmailListResponse> {
+  const params = new URLSearchParams();
+
+  params.append("page", page.toString());
+  params.append("limit", limit.toString());
+
+  if (search) params.append("search", search);
+  if (filters?.isRead !== undefined)
+    params.append("isRead", filters.isRead.toString());
+  if (filters?.dateFrom) params.append("dateFrom", filters.dateFrom);
+  if (filters?.dateTo) params.append("dateTo", filters.dateTo);
+  if (filters?.labels?.length)
+    params.append("labels", filters.labels.join(","));
+
+  const encodedCategory = encodeURIComponent(category);
+  const url = `${API_URL}/emails/category/${encodedCategory}?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch emails for category: ${category}`);
+  }
+
+  const data = await response.json();
+
+  console.log(`Fetched emails for category ${category}:`, data);
+
+  return {
+    emails: data.data?.emails || [],
+    page: data.data?.page || page,
+    totalPages: data.data?.totalPages || 1,
+    totalCount: data.data?.totalCount || 0,
+    hasMore: data.data?.hasMore || false,
+  };
+}
+
 function filterEmailsByFolder(emails: Email[], folder: EmailFolder): Email[] {
   switch (folder) {
     case "inbox":
@@ -151,6 +201,7 @@ export async function fetchCategories(): Promise<Category[]> {
 
   return data.data || [];
 }
+
 export async function updateEmailCategory(
   id: string,
   category: string

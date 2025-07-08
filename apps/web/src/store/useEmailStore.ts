@@ -3,6 +3,7 @@ import { Category, Email, EmailFolder, EmailStats } from "@/types/email";
 import {
   fetchEmailById,
   fetchEmails,
+  fetchEmailsByCategory,
   fetchEmailStats,
   markEmailAsRead,
   fetchCategories,
@@ -10,9 +11,10 @@ import {
 
 interface EmailStore {
   emails: Email[];
-  categories: Category[]; // Changed from Categories[] to Category[]
+  categories: Category[];
   selectedEmail: Email | null;
   activeFolder: EmailFolder;
+  activeCategory: string | null;
   loading: boolean;
   error: string | null;
   stats: EmailStats | null;
@@ -24,8 +26,10 @@ interface EmailStore {
   loadEmails: () => Promise<void>;
   loadCategories: () => Promise<void>;
   loadEmailById: (id: string) => Promise<void>;
+  loadEmailsByCategory: (category: string) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   setActiveFolder: (folder: EmailFolder) => void;
+  setActiveCategory: (category: string | null) => void;
   setPage: (page: number) => void;
   loadStats: () => Promise<void>;
   clearError: () => void;
@@ -36,6 +40,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   categories: [],
   selectedEmail: null,
   activeFolder: "inbox",
+  activeCategory: null,
   loading: false,
   error: null,
   stats: null,
@@ -45,15 +50,25 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   hasMore: false,
 
   loadEmails: async () => {
-    const { activeFolder, page } = get();
+    const { activeFolder, activeCategory, page } = get();
     set({ loading: true, error: null });
 
     try {
-      const response = await fetchEmails({
-        page,
-        folder: activeFolder,
-        limit: 20,
-      });
+      let response;
+
+      if (activeCategory) {
+        response = await fetchEmailsByCategory({
+          category: activeCategory,
+          page,
+          limit: 20,
+        });
+      } else {
+        response = await fetchEmails({
+          page,
+          folder: activeFolder,
+          limit: 20,
+        });
+      }
 
       console.log("Loaded emails:", response.emails);
 
@@ -68,6 +83,37 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       console.error("Failed to load emails:", error);
       set({
         error: "Failed to load emails",
+        loading: false,
+      });
+    }
+  },
+
+  loadEmailsByCategory: async (category: string) => {
+    const { page } = get();
+    set({ loading: true, error: null });
+
+    try {
+      const response = await fetchEmailsByCategory({
+        category,
+        page,
+        limit: 20,
+      });
+
+      console.log(`Loaded emails for category ${category}:`, response.emails);
+
+      set({
+        emails: response.emails,
+        totalPages: response.totalPages,
+        totalCount: response.totalCount,
+        hasMore: response.hasMore,
+        activeCategory: category,
+        activeFolder: "inbox",
+        loading: false,
+      });
+    } catch (error) {
+      console.error(`Failed to load emails for category ${category}:`, error);
+      set({
+        error: `Failed to load emails for category: ${category}`,
         loading: false,
       });
     }
@@ -110,10 +156,26 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   setActiveFolder: (folder: EmailFolder) => {
     set({
       activeFolder: folder,
+      activeCategory: null,
       page: 1,
       selectedEmail: null,
     });
     get().loadEmails();
+  },
+
+  setActiveCategory: (category: string | null) => {
+    set({
+      activeCategory: category,
+      activeFolder: "inbox",
+      page: 1,
+      selectedEmail: null,
+    });
+
+    if (category) {
+      get().loadEmailsByCategory(category);
+    } else {
+      get().loadEmails();
+    }
   },
 
   setPage: (page: number) => {

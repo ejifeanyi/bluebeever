@@ -25,8 +25,16 @@ interface Label {
 }
 
 const Sidebar: React.FC = () => {
-  const { activeFolder, stats, categories, loadStats, loadCategories } =
-    useEmailStore();
+  const {
+    activeFolder,
+    activeCategory,
+    stats,
+    categories,
+    loadStats,
+    loadCategories,
+    setActiveCategory,
+    setActiveFolder,
+  } = useEmailStore();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -96,7 +104,9 @@ const Sidebar: React.FC = () => {
     },
   ];
 
-  const handleFolderClick = (path: string) => {
+  const handleFolderClick = (path: string, folderId: EmailFolder) => {
+    setActiveCategory(null);
+    setActiveFolder(folderId);
     router.push(path);
   };
 
@@ -105,10 +115,14 @@ const Sidebar: React.FC = () => {
   };
 
   const handleCategoryClick = (categoryName: string) => {
-    console.log("Category clicked:", categoryName);
+    setActiveCategory(categoryName);
+    router.push(`/category/${encodeURIComponent(categoryName)}`);
   };
 
-  const isActive = (path: string) => pathname === path;
+  const isActive = (path: string) => pathname === path && !activeCategory;
+  const isCategoryActive = (categoryName: string) =>
+    activeCategory === categoryName &&
+    pathname === `/category/${encodeURIComponent(categoryName)}`;
 
   return (
     <aside className="w-50 h-screen flex flex-col">
@@ -121,7 +135,7 @@ const Sidebar: React.FC = () => {
               name={item.name}
               count={item.count}
               active={isActive(item.path)}
-              onClick={() => handleFolderClick(item.path)}
+              onClick={() => handleFolderClick(item.path, item.id)}
             />
           ))}
         </SidebarSection>
@@ -132,7 +146,7 @@ const Sidebar: React.FC = () => {
               key={category.name || index}
               name={category.name || "Unknown Category"}
               count={category.count}
-              active={false}
+              active={isCategoryActive(category.name || "unknown")}
               onClick={() => handleCategoryClick(category.name || "unknown")}
             />
           ))}

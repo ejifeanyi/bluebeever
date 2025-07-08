@@ -20,6 +20,7 @@ const MailPage = ({
 }: MailPageProps) => {
   const {
     activeFolder,
+    activeCategory,
     setActiveFolder,
     loadEmails,
     emails,
@@ -33,13 +34,17 @@ const MailPage = ({
   const unreadCount = emails.filter((email) => !email.isRead).length;
 
   useEffect(() => {
-    if (activeFolder !== folder) {
+    if (activeFolder !== folder && !activeCategory) {
       setActiveFolder(folder);
       loadEmails();
     }
-  }, [folder, activeFolder, setActiveFolder, loadEmails]);
+  }, [folder, activeFolder, activeCategory, setActiveFolder, loadEmails]);
 
-  const getFolderTitle = (folder: EmailFolder) => {
+  const getDisplayTitle = () => {
+    if (activeCategory) {
+      return activeCategory;
+    }
+
     const titles: Record<EmailFolder, string> = {
       inbox: "Inbox",
       favorites: "Favorites",
@@ -51,6 +56,25 @@ const MailPage = ({
     };
     return titles[folder] || folder;
   };
+
+  const getDisplayCounts = () => {
+    if (activeCategory) {
+      const categoryData = useEmailStore
+        .getState()
+        .categories.find((cat) => cat.name === activeCategory);
+      return {
+        totalCount: categoryData?.count || emails.length,
+        unreadCount: emails.filter((email) => !email.isRead).length,
+      };
+    }
+    return {
+      totalCount,
+      unreadCount: emails.filter((email) => !email.isRead).length,
+    };
+  };
+
+  const { totalCount: displayTotalCount, unreadCount: displayUnreadCount } =
+    getDisplayCounts();
 
   const handlePreviousPage = () => {
     if (page > 1) {
@@ -72,10 +96,10 @@ const MailPage = ({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-baseline gap-3">
           <h1 className="text-2xl font-bold text-accent-foreground">
-            {getFolderTitle(folder)}
+            {getDisplayTitle()}
           </h1>
           <span className="text-accent-foreground/50 text-xs">
-            ({totalCount} Messages, {unreadCount} Unread)
+            ({displayTotalCount} Messages, {displayUnreadCount} Unread)
           </span>
         </div>
         <div className="flex items-center justify-end space-x-0.5">
