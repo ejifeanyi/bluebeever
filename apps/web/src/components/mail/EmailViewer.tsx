@@ -19,8 +19,12 @@ import {
   ChevronUp,
   Paperclip,
   Download,
+  ExternalLink,
+  Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { getSenderName, getSenderNameInitials } from "@/utils";
 
 interface EmailViewerProps {
   emailId: string | null;
@@ -30,6 +34,9 @@ interface EmailViewerProps {
 const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
   const { selectedEmail, loadEmailById, markAsRead } = useEmailStore();
   const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set());
+  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => {
     if (emailId) {
@@ -78,63 +85,166 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
     return new Date(dateString).toLocaleString();
   };
 
+  const handleImageError = (src: string) => {
+    setImageLoadErrors((prev) => new Set(prev).add(src));
+  };
+
   const formatEmailBody = (body: string) => {
-    return body
+    // Clean up the body text and remove excessive whitespace
+    let cleanBody = body
       .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
-      .replace(/^-+$/gm, '<hr class="my-4 border-gray-300">')
-      .replace(/https?:\/\/[^\s]+/g, (url) => {
-        const decodedUrl = decodeURIComponent(url);
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline break-all">${decodedUrl.length > 60 ? decodedUrl.substring(0, 60) + "..." : decodedUrl}</a>`;
-      })
-      .replace(/\n/g, "<br>");
+      .trim();
+
+    // Extract and format images
+    const imageRegex =
+      /https?:\/\/[^\s"'>]+\.(?:png|jpg|jpeg|gif|svg|webp)(?:\@2x)?(?:\?[^\s"'>]*)?/gi;
+    const images = cleanBody.match(imageRegex) || [];
+
+    // Extract and format links (excluding images)
+    const linkRegex = /https?:\/\/[^\s"'>]+(?!\.(png|jpg|jpeg|gif|svg|webp))/gi;
+
+    // Replace images with proper img tags
+    cleanBody = cleanBody.replace(imageRegex, (imageUrl) => {
+      const cleanUrl = imageUrl.replace(/['">\s]+$/, "");
+      return `<img src="${cleanUrl}" alt="Email Image" class="email-image" data-url="${cleanUrl}" style="max-width: 100%; height: auto; margin: 16px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="image-placeholder" style="display: none; align-items: center; gap: 8px; padding: 16px; background: #f3f4f6; border-radius: 8px; margin: 16px 0; color: #6b7280;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg><span>Image could not be loaded</span></div>`;
+    });
+
+    // Format links with better styling
+    cleanBody = cleanBody.replace(linkRegex, (url) => {
+      const cleanUrl = url.replace(/['">\s]+$/, "");
+      const decodedUrl = decodeURIComponent(cleanUrl);
+      let displayUrl = decodedUrl;
+
+      // Shorten very long URLs
+      if (displayUrl.length > 80) {
+        displayUrl = displayUrl.substring(0, 80) + "...";
+      }
+
+      return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="email-link" style="color: #2563eb; text-decoration: underline; word-break: break-word; display: inline-flex; align-items: center; gap: 4px; margin: 2px 0;">${displayUrl}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15,3 21,3 21,9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`;
+    });
+
+    // Format headers and important text
+    cleanBody = cleanBody.replace(
+      /^([A-Z][A-Za-z\s]+)$/gm,
+      '<h3 style="font-size: 18px; font-weight: 600; margin: 24px 0 12px 0; color: #1f2937;">$1</h3>'
+    );
+
+    // Format separators
+    cleanBody = cleanBody.replace(
+      /^-+$/gm,
+      '<hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;">'
+    );
+
+    // Convert line breaks to proper spacing
+    cleanBody = cleanBody.replace(
+      /\n\n/g,
+      "<div style='margin: 16px 0;'></div>"
+    );
+    cleanBody = cleanBody.replace(/\n/g, "<br>");
+
+    return cleanBody;
+  };
+
+  const extractEmailSubject = (body: string) => {
+    // Try to extract a subject or title from the email body
+    const lines = body.split("\n").filter((line) => line.trim());
+    const potentialSubject = lines.find(
+      (line) =>
+        line.length > 10 &&
+        line.length < 100 &&
+        !line.includes("http") &&
+        !line.includes("@")
+    );
+    return potentialSubject || selectedEmail.subject || "Email Content";
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3 ">
+    <div className="h-full flex flex-col bg-white">
+      <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={onBack} className="p-2">
-            <ArrowLeft className="h-4 w-4 text-accent-foreground" />
+            <ArrowLeft className="h-4 w-4 text-gray-600" />
           </Button>
-          <h2 className="text-lg font-semibold max-w-md text-accent-foreground">
-            {selectedEmail.subject}
-          </h2>
+          <Avatar className="h-10 w-10">
+            <AvatarImage
+              src={selectedEmail.avatarUrl}
+              alt={getSenderName(selectedEmail.from)}
+              className="object-cover"
+            />
+            <AvatarFallback className="bg-primary text-white">
+              {getSenderNameInitials(selectedEmail.from)}
+            </AvatarFallback>
+          </Avatar>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-gray-900">
+              {getSenderName(selectedEmail.from)}
+            </span>
+            <p className="text-xs text-gray-600">
+              {formatDate(selectedEmail.date)}
+              <span className="text-xs text-gray-400 ml-2">
+                {selectedEmail.from}
+              </span>
+            </p>
+          </div>
+
           {isThreaded && (
-            <Badge
-              variant="secondary"
-              className="text-xs text-accent-foreground"
-            >
+            <Badge variant="secondary" className="text-xs">
               {emails.length} messages
             </Badge>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm">
-            <Star className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <Star className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <Archive className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <Archive className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <Trash2 className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <Trash2 className="h-4 w-4" />
           </Button>
           <Separator orientation="vertical" className="h-6" />
-          <Button variant="ghost" size="sm">
-            <Reply className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <Reply className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <ReplyAll className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <ReplyAll className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <Forward className="h-4 w-4 text-accent-foreground" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 hover:text-gray-900"
+          >
+            <Forward className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+        <div className="p-6 space-y-6">
           {emails.map((email: Email, index: number) => {
             const isExpanded =
               expandedEmails.has(email.id) || index === emails.length - 1;
@@ -143,55 +253,33 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
             return (
               <div
                 key={email.id}
-                className={cn(
-                  "border rounded-lg",
-                  isExpanded ? "border-border" : "border-border/50"
-                )}
+                className="border border-gray-200 rounded-lg overflow-hidden"
               >
                 <div
                   className={cn(
                     "p-4 cursor-pointer transition-colors",
-                    isExpanded
-                      ? "bg-background"
-                      : "bg-muted/20 hover:bg-muted/40"
+                    isExpanded ? "bg-white" : "bg-gray-50 hover:bg-gray-100"
                   )}
                   onClick={() => !isLastEmail && toggleEmailExpansion(email.id)}
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">
-                            {email.from.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm truncate">
-                              {email.from}
-                            </span>
-                            {email.labels.includes("STARRED") && (
-                              <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            to:{" "}
-                            {Array.isArray(email.to)
-                              ? email.to.join(", ")
-                              : email.to}
-                          </div>
-                        </div>
-                      </div>
-
+                      <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                        {extractEmailSubject(
+                          typeof email.body === "string"
+                            ? email.body
+                            : email.snippet
+                        )}
+                      </h2>
                       {!isExpanded && (
-                        <p className="text-sm text-muted-foreground truncate">
+                        <p className="text-sm text-gray-600 truncate">
                           {email.snippet}
                         </p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">
                         {formatDate(email.date)}
                       </span>
                       {!isLastEmail && (
@@ -212,14 +300,12 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
                 </div>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4">
-                    <Separator className="mb-4" />
-
+                  <div className="px-6 pb-6">
                     {email.attachments && email.attachments.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Paperclip className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">
+                      <div className="mb-6">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Paperclip className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700">
                             {email.attachments.length} attachment(s)
                           </span>
                         </div>
@@ -228,7 +314,7 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
                             (attachment: EmailAttachment) => (
                               <div
                                 key={attachment.id}
-                                className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md"
+                                className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-md"
                               >
                                 <span className="text-sm truncate max-w-32">
                                   {attachment.filename}
@@ -256,7 +342,12 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
                               : email.snippet
                           ),
                         }}
-                        className="text-sm leading-relaxed text-accent-foreground"
+                        className="text-sm leading-relaxed text-gray-800 email-content"
+                        style={{
+                          lineHeight: "1.6",
+                          fontSize: "14px",
+                          color: "#374151",
+                        }}
                       />
                     </div>
                   </div>
@@ -266,6 +357,37 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
           })}
         </div>
       </ScrollArea>
+
+      <style jsx>{`
+        .email-content img {
+          max-width: 100%;
+          height: auto;
+          margin: 16px 0;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .email-content a {
+          color: #2563eb;
+          text-decoration: underline;
+          word-break: break-word;
+        }
+
+        .email-content a:hover {
+          color: #1d4ed8;
+        }
+
+        .image-placeholder {
+          display: none;
+          align-items: center;
+          gap: 8px;
+          padding: 16px;
+          background: #f3f4f6;
+          border-radius: 8px;
+          margin: 16px 0;
+          color: #6b7280;
+        }
+      `}</style>
     </div>
   );
 };
