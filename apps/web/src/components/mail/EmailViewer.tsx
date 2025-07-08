@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useEmailStore } from "@/store/useEmailStore";
 import { Email, EmailAttachment } from "@/types/email";
 import { Button } from "@/components/ui/button";
@@ -35,13 +36,42 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
   const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(
     new Set()
   );
+  const [hasUpdatedUrl, setHasUpdatedUrl] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (emailId) {
       loadEmailById(emailId);
       markAsRead(emailId);
+
+      // Only update URL if we haven't already and the current path doesn't end with this emailId
+      if (!hasUpdatedUrl && !pathname.endsWith(emailId)) {
+        const pathParts = pathname.split("/").filter(Boolean);
+
+        // Remove any existing email IDs from the path (assuming they're UUIDs)
+        const cleanPathParts = pathParts.filter(
+          (part) =>
+            !part.match(
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+            )
+        );
+
+        // Add the new email ID
+        const newPath = `/${cleanPathParts.join("/")}/${emailId}`;
+
+        if (window.location.pathname !== newPath) {
+          window.history.pushState({}, "", newPath);
+          setHasUpdatedUrl(true);
+        }
+      }
     }
-  }, [emailId, loadEmailById, markAsRead]);
+  }, [emailId, loadEmailById, markAsRead, pathname, hasUpdatedUrl]);
+
+  // Reset URL update flag when emailId changes
+  useEffect(() => {
+    setHasUpdatedUrl(false);
+  }, [emailId]);
 
   if (!emailId) {
     return (
@@ -93,6 +123,9 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
+    // Remove brackets before URLs
+    cleanBody = cleanBody.replace(/\[(?=https?:\/\/)/g, "");
+
     const imageRegex =
       /https?:\/\/[^\s"'>]+\.(?:png|jpg|jpeg|gif|svg|webp)(?:\@2x)?(?:\?[^\s"'>]*)?/gi;
     const images = cleanBody.match(imageRegex) || [];
@@ -100,13 +133,12 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
     const linkRegex = /https?:\/\/[^\s"'>]+(?!\.(png|jpg|jpeg|gif|svg|webp))/gi;
 
     cleanBody = cleanBody.replace(imageRegex, (imageUrl) => {
-      const cleanUrl = imageUrl.replace(/['">\s]+$/, "");
+      const cleanUrl = imageUrl.replace(/['">\s\]]+$/, "");
       return `<img src="${cleanUrl}" alt="Email Image" class="email-image" data-url="${cleanUrl}" style="max-width: 100%; height: auto; margin: 16px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="image-placeholder" style="display: none; align-items: center; gap: 8px; padding: 16px; background: hsl(var(--muted)); border-radius: 8px; margin: 16px 0; color: hsl(var(--muted-foreground));"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg><span>Image could not be loaded</span></div>`;
     });
 
-    // Updated link formatting to remove parentheses and use primary color
     cleanBody = cleanBody.replace(linkRegex, (url) => {
-      const cleanUrl = url.replace(/['">\s]+$/, "");
+      const cleanUrl = url.replace(/['">\s\]]+$/, "");
       const decodedUrl = decodeURIComponent(cleanUrl);
       let displayUrl = decodedUrl;
 
@@ -123,10 +155,34 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
     // Clean up any remaining trailing parentheses after URLs
     cleanBody = cleanBody.replace(/(https?:\/\/[^\s"'>]+)\)/g, "$1");
 
+    // Format headers with proper spacing and hierarchy
     cleanBody = cleanBody.replace(
-      /^([A-Z][A-Za-z\s]+)$/gm,
-      '<h3 style="font-size: 18px; font-weight: 600; margin: 24px 0 12px 0; color: hsl(var(--foreground));">$1</h3>'
+      /^# (.+)$/gm,
+      '<h1 style="font-size: 24px; font-weight: 700; margin: 32px 0 16px 0; color: hsl(var(--foreground)); line-height: 1.2;">$1</h1>'
     );
+
+    cleanBody = cleanBody.replace(
+      /^## (.+)$/gm,
+      '<h2 style="font-size: 20px; font-weight: 600; margin: 24px 0 12px 0; color: hsl(var(--foreground)); line-height: 1.3;">$1</h2>'
+    );
+
+    cleanBody = cleanBody.replace(
+      /^### (.+)$/gm,
+      '<h3 style="font-size: 16px; font-weight: 600; margin: 20px 0 8px 0; color: hsl(var(--foreground)); line-height: 1.4;">$1</h3>'
+    );
+
+    // Format standalone titles that aren't markdown headers (but exclude date/time patterns)
+    cleanBody = cleanBody.replace(/^([A-Z][A-Za-z\s&]+)$/gm, (match) => {
+      if (
+        match.includes("/") ||
+        match.includes(":") ||
+        match.includes("AM") ||
+        match.includes("PM")
+      ) {
+        return match;
+      }
+      return `<h3 style="font-size: 18px; font-weight: 600; margin: 24px 0 12px 0; color: hsl(var(--foreground));">${match}</h3>`;
+    });
 
     cleanBody = cleanBody.replace(
       /^-+$/gm,
@@ -156,7 +212,7 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex items-center justify-between p-6 bg-baackground">
+      <div className="flex items-center justify-between p-6 bg-background">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={onBack} className="p-2">
             <ArrowLeft className="h-4 w-4 text-foreground" />
@@ -306,7 +362,7 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
                             (attachment: EmailAttachment) => (
                               <div
                                 key={attachment.id}
-                                className="flex items-center gap-2 px-3 py-2 bg-background"
+                                className="flex items-center gap-2 px-3 py-2 bg-background rounded-md border"
                               >
                                 <span className="text-sm truncate max-w-32">
                                   {attachment.filename}
