@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
 import { useEmailStore } from "@/store/useEmailStore";
 import { EmailList } from "@/components/email/EmailList";
 import { EmailFolder } from "@/types/email";

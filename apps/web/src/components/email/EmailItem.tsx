@@ -68,7 +68,9 @@ export function EmailItem({
               alt={getSenderName(email.from)}
               className="object-cover"
             />
-            <AvatarFallback>{getSenderNameInitials(email.from)}</AvatarFallback>
+            <AvatarFallback className="text-accent-foreground">
+              {getSenderNameInitials(email.from)}
+            </AvatarFallback>
           </Avatar>
           <div className="flex flex-col space-y-1">
             <span className="text-accent-foreground text-sm font-medium">

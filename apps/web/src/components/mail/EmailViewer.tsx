@@ -167,7 +167,7 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
               alt={getSenderName(selectedEmail.from)}
               className="object-cover"
             />
-            <AvatarFallback className="bg-primary text-primary-foreground">
+            <AvatarFallback className="text-accent-foreground">
               {getSenderNameInitials(selectedEmail.from)}
             </AvatarFallback>
           </Avatar>
