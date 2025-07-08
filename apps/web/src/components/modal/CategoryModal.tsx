@@ -62,8 +62,8 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden bg-card border border-border shadow-2xl">
-        <DialogHeader className="pb-4 border-b border-border">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden rounded-2xl bg-background border border-border shadow-2xl">
+        <DialogHeader className="pb-4">
           <DialogTitle className="flex items-center justify-center gap-3 text-xl font-semibold text-card-foreground">
             <div className="p-2 bg-primary/10 rounded-xl border border-primary/20">
               <FolderOpen className="h-5 w-5 text-primary" />
@@ -87,7 +87,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>): void =>
                   setSearchTerm(e.target.value)
                 }
-                className="pl-10 h-11 text-base border-input focus:border-ring focus:ring-ring bg-background"
+                className="pl-10 bg-transparent border-0 outline-none text-sm placeholder:text-muted-foreground text-foreground"
               />
             </div>
           )}
@@ -102,7 +102,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                       key={category}
                       variant="ghost"
                       className={cn(
-                        "w-full justify-between h-14 px-4 text-left transition-all duration-200 hover:bg-accent/50 hover:scale-[1.02] group",
+                        "w-full justify-between py-6 px-3 text-left rounded-md cursor-pointer",
                         currentCategory === category
                           ? "bg-primary/10 border-2 border-primary text-primary shadow-sm"
                           : "border-2 border-transparent hover:border-border/50"
@@ -127,7 +127,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                             )}
                           />
                         </div>
-                        <span className="capitalize font-medium text-base tracking-wide">
+                        <span className="font-medium text-sm text-accent-foreground">
                           {category}
                         </span>
                       </div>
@@ -160,13 +160,13 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
             {!isCreating ? (
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 h-14 border-2 border-dashed border-muted hover:border-primary hover:bg-accent/30 transition-all duration-200 hover:scale-[1.01] group"
+                className="w-full justify-start gap-3 h-14 border-2 border-dashed cursor-pointer border-muted hover:border-primary hover:bg-accent/30 transition-all duration-200 hover:scale-[1.01] group"
                 onClick={(): void => setIsCreating(true)}
               >
                 <div className="p-2 bg-accent/50 rounded-lg group-hover:bg-primary/20 transition-all duration-200">
                   <Plus className="h-4 w-4 text-accent-foreground group-hover:text-primary" />
                 </div>
-                <span className="font-medium tracking-wide">
+                <span className="font-medium tracking-wide text-accent-foreground">
                   Create New Category
                 </span>
               </Button>
@@ -176,7 +176,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                   <div className="p-1.5 bg-primary/20 rounded-lg">
                     <Plus className="h-4 w-4 text-primary" />
                   </div>
-                  <span className="font-semibold text-card-foreground tracking-wide">
+                  <span className="font-semibold text-accent-foreground tracking-wide">
                     New Category
                   </span>
                 </div>
@@ -197,7 +197,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                       setNewCategory("");
                     }
                   }}
-                  className="h-12 text-base border-input focus:border-ring focus:ring-ring bg-background shadow-sm"
+                  className="h-12 text-base text-accent-foreground border-input focus:border-ring focus:ring-ring bg-background shadow-sm"
                   autoFocus
                 />
                 <div className="flex gap-3">
@@ -205,7 +205,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                     size="sm"
                     onClick={handleCreateCategory}
                     disabled={!newCategory.trim()}
-                    className="flex-1 h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm hover:shadow-md transition-all duration-200"
+                    className="flex-1 h-11 bg-primary hover:bg-primary/90 text-accent-foreground font-medium shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
                   >
                     Create Category
                   </Button>
@@ -216,7 +216,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                       setIsCreating(false);
                       setNewCategory("");
                     }}
-                    className="flex-1 h-11 border-border hover:bg-accent/50 transition-all duration-200"
+                    className="flex-1 h-11 border-border hover:bg-accent/50 transition-all duration-200 text-accent-foreground cursor-pointer"
                   >
                     Cancel
                   </Button>
