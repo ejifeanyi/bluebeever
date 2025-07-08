@@ -45,11 +45,9 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
       loadEmailById(emailId);
       markAsRead(emailId);
 
-      // Only update URL if we haven't already and the current path doesn't end with this emailId
       if (!hasUpdatedUrl && !pathname.endsWith(emailId)) {
         const pathParts = pathname.split("/").filter(Boolean);
 
-        // Remove any existing email IDs from the path (assuming they're UUIDs)
         const cleanPathParts = pathParts.filter(
           (part) =>
             !part.match(
@@ -57,7 +55,6 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
             )
         );
 
-        // Add the new email ID
         const newPath = `/${cleanPathParts.join("/")}/${emailId}`;
 
         if (window.location.pathname !== newPath) {
@@ -68,7 +65,6 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
     }
   }, [emailId, loadEmailById, markAsRead, pathname, hasUpdatedUrl]);
 
-  // Reset URL update flag when emailId changes
   useEffect(() => {
     setHasUpdatedUrl(false);
   }, [emailId]);
@@ -123,7 +119,6 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
-    // Remove brackets before URLs
     cleanBody = cleanBody.replace(/\[(?=https?:\/\/)/g, "");
 
     const imageRegex =
@@ -149,13 +144,10 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
       return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="email-link" style="color: hsl(var(--primary)); text-decoration: underline; word-break: break-word; display: inline-flex; align-items: center; gap: 4px; margin: 2px 0;">${displayUrl}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15,3 21,3 21,9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`;
     });
 
-    // Remove parentheses around links in text format like "World Summit (https://example.com)"
     cleanBody = cleanBody.replace(/\s*\(([^)]*https?:\/\/[^)]+)\)\s*/g, " $1 ");
 
-    // Clean up any remaining trailing parentheses after URLs
     cleanBody = cleanBody.replace(/(https?:\/\/[^\s"'>]+)\)/g, "$1");
 
-    // Format headers with proper spacing and hierarchy
     cleanBody = cleanBody.replace(
       /^# (.+)$/gm,
       '<h1 style="font-size: 24px; font-weight: 700; margin: 32px 0 16px 0; color: hsl(var(--foreground)); line-height: 1.2;">$1</h1>'
@@ -171,7 +163,6 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
       '<h3 style="font-size: 16px; font-weight: 600; margin: 20px 0 8px 0; color: hsl(var(--foreground)); line-height: 1.4;">$1</h3>'
     );
 
-    // Format standalone titles that aren't markdown headers (but exclude date/time patterns)
     cleanBody = cleanBody.replace(/^([A-Z][A-Za-z\s&]+)$/gm, (match) => {
       if (
         match.includes("/") ||
@@ -251,21 +242,21 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <Star className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <Archive className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -273,21 +264,21 @@ const EmailViewer = ({ emailId, onBack }: EmailViewerProps) => {
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <Reply className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <ReplyAll className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="text-accent-foreground/50"
+            className="text-accent-foreground/50 cursor-pointer"
           >
             <Forward className="h-4 w-4" />
           </Button>

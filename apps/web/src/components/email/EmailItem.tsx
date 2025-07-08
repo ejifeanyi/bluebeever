@@ -54,9 +54,9 @@ export function EmailItem({
   return (
     <div
       className={cn(
-        "flex flex-col space-y-3 rounded-md py-2 px-3 cursor-pointer transition-colors ease-in-out",
+        "flex flex-col space-y-3 rounded-md py-3 px-3 cursor-pointer transition-colors ease-in-out shadow-none",
         !email.isRead ? "bg-background font-medium" : "",
-        isSelected ? "bg-primary/10 border-primary/20" : "hover:bg-accent/50"
+        isSelected ? "bg-primary/10" : "hover:bg-accent/50"
       )}
       onClick={handleClick}
     >
