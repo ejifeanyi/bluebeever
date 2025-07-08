@@ -29,13 +29,17 @@ const MailPage = ({
     totalPages,
     setPage,
     loading,
+    categories,
   } = useEmailStore();
 
   const unreadCount = emails.filter((email) => !email.isRead).length;
 
   useEffect(() => {
-    if (activeFolder !== folder && !activeCategory) {
+    if (!activeCategory && activeFolder !== folder) {
       setActiveFolder(folder);
+    }
+
+    if (activeCategory || activeFolder !== folder) {
       loadEmails();
     }
   }, [folder, activeFolder, activeCategory, setActiveFolder, loadEmails]);
@@ -59,9 +63,9 @@ const MailPage = ({
 
   const getDisplayCounts = () => {
     if (activeCategory) {
-      const categoryData = useEmailStore
-        .getState()
-        .categories.find((cat) => cat.name === activeCategory);
+      const categoryData = categories.find(
+        (cat) => cat.name === activeCategory
+      );
       return {
         totalCount: categoryData?.count || emails.length,
         unreadCount: emails.filter((email) => !email.isRead).length,

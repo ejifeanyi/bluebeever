@@ -1,29 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEmailStore } from "@/store/useEmailStore";
 import MailPage from "@/components/mail/MailPage";
 import EmailViewer from "@/components/mail/EmailViewer";
 
-const CategoryPage = () => {
+const CategoryEmailDetailPage = () => {
   const params = useParams();
+  const router = useRouter();
   const categoryName = decodeURIComponent(params.category as string);
-  const { setActiveCategory, activeCategory } = useEmailStore();
-  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const emailId = params.emailId as string;
+  const { setActiveCategory, activeCategory, loadEmails } = useEmailStore();
+  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(
+    emailId
+  );
 
   useEffect(() => {
     if (categoryName && activeCategory !== categoryName) {
       setActiveCategory(categoryName);
+      loadEmails();
     }
-  }, [categoryName, activeCategory, setActiveCategory]);
+  }, [categoryName, activeCategory, setActiveCategory, loadEmails]);
 
-  const handleEmailSelect = (emailId: string) => {
-    setSelectedEmailId(emailId);
+  useEffect(() => {
+    if (emailId) {
+      setSelectedEmailId(emailId);
+    }
+  }, [emailId]);
+
+  const handleEmailSelect = (newEmailId: string) => {
+    router.push(`/category/${encodeURIComponent(categoryName)}/${newEmailId}`);
   };
 
   const handleBackToList = () => {
-    setSelectedEmailId(null);
+    router.push(`/category/${encodeURIComponent(categoryName)}`);
   };
 
   return (
@@ -40,4 +51,4 @@ const CategoryPage = () => {
   );
 };
 
-export default CategoryPage;
+export default CategoryEmailDetailPage;
