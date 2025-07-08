@@ -58,3 +58,8 @@ export type EmailFolder =
   | "trash"
   | "archive"
   | "favorites";
+
+export interface Category {
+  name: string | null;
+  count: number;
+}

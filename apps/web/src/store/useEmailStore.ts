@@ -1,9 +1,16 @@
 import { create } from "zustand";
-import { Email, EmailFolder, EmailStats } from "@/types/email";
-import { fetchEmailById, fetchEmails, fetchEmailStats, markEmailAsRead } from "@/api/email";
+import { Category, Email, EmailFolder, EmailStats } from "@/types/email";
+import {
+  fetchEmailById,
+  fetchEmails,
+  fetchEmailStats,
+  markEmailAsRead,
+  fetchCategories,
+} from "@/api/email";
 
 interface EmailStore {
   emails: Email[];
+  categories: Category[]; // Changed from Categories[] to Category[]
   selectedEmail: Email | null;
   activeFolder: EmailFolder;
   loading: boolean;
@@ -15,6 +22,7 @@ interface EmailStore {
   hasMore: boolean;
 
   loadEmails: () => Promise<void>;
+  loadCategories: () => Promise<void>;
   loadEmailById: (id: string) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   setActiveFolder: (folder: EmailFolder) => void;
@@ -25,6 +33,7 @@ interface EmailStore {
 
 export const useEmailStore = create<EmailStore>((set, get) => ({
   emails: [],
+  categories: [],
   selectedEmail: null,
   activeFolder: "inbox",
   loading: false,
@@ -72,6 +81,16 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
     } catch (error) {
       console.error("Failed to load email:", error);
       set({ error: "Failed to load email" });
+    }
+  },
+
+  loadCategories: async () => {
+    try {
+      const categories = await fetchCategories();
+      set({ categories });
+    } catch (error) {
+      console.error("Failed to load categories:", error);
+      set({ error: "Failed to load categories" });
     }
   },
 

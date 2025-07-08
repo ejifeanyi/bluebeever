@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Archive,
   FileText,
-  Folder,
   Inbox,
   Send,
   Star,
@@ -26,13 +25,15 @@ interface Label {
 }
 
 const Sidebar: React.FC = () => {
-  const { activeFolder, stats, loadStats } = useEmailStore();
+  const { activeFolder, stats, categories, loadStats, loadCategories } =
+    useEmailStore();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    loadCategories();
+  }, [loadStats, loadCategories]);
 
   const labels: Label[] = [
     { id: "1", name: "Work", color: "#3b82f6", count: 12 },
@@ -103,6 +104,10 @@ const Sidebar: React.FC = () => {
     console.log("Label clicked:", labelId);
   };
 
+  const handleCategoryClick = (categoryName: string) => {
+    console.log("Category clicked:", categoryName);
+  };
+
   const isActive = (path: string) => pathname === path;
 
   return (
@@ -122,12 +127,15 @@ const Sidebar: React.FC = () => {
         </SidebarSection>
 
         <SidebarSection title="Categories" collapsible defaultCollapsed={false}>
-          <SidebarItem
-            icon={Folder}
-            name="All Categories"
-            active={false}
-            onClick={() => console.log("Categories to be implemented")}
-          />
+          {categories.map((category, index) => (
+            <SidebarItem
+              key={category.name || index}
+              name={category.name || "Unknown Category"}
+              count={category.count}
+              active={false}
+              onClick={() => handleCategoryClick(category.name || "unknown")}
+            />
+          ))}
         </SidebarSection>
 
         <SidebarSection title="Labels" collapsible defaultCollapsed={false}>

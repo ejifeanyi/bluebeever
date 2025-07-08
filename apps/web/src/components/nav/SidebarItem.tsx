@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface SidebarItemProps {
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
   name: string;
   count?: number;
   active?: boolean;
@@ -24,14 +24,16 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       )}
     >
       <div className="flex items-center space-x-3">
-        <Icon
-          className={cn(
-            "h-4 w-4 transition-colors",
-            active
-              ? "text-primary"
-              : "text-muted-foreground group-hover:text-foreground"
-          )}
-        />
+        {Icon && (
+          <Icon
+            className={cn(
+              "h-4 w-4 transition-colors",
+              active
+                ? "text-primary"
+                : "text-muted-foreground group-hover:text-foreground"
+            )}
+          />
+        )}
         <span
           className={cn(
             "font-medium transition-colors",
