@@ -27,13 +27,20 @@ export function EmailItem({
   const { markAsRead, loadEmailById } = useEmailStore();
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  const categories = email.labels || [];
-
   const handleSelectCategory = (category: string) => {
+    // TODO: Implement category assignment logic
+    console.log("Assigning category:", category, "to email:", email.id);
     setIsCategoryModalOpen(false);
   };
 
   const handleCreateCategory = (category: string) => {
+    // TODO: Implement category creation and assignment logic
+    console.log(
+      "Creating and assigning category:",
+      category,
+      "to email:",
+      email.id
+    );
     setIsCategoryModalOpen(false);
   };
 
@@ -116,7 +123,6 @@ export function EmailItem({
         onClose={() => setIsCategoryModalOpen(false)}
         onSelectCategory={handleSelectCategory}
         currentCategory={email.category}
-        categories={categories}
         onCreateCategory={handleCreateCategory}
       />
     </div>

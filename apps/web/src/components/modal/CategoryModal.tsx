@@ -1,17 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Plus, Folder, Check, FolderOpen, Search } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useEmailStore } from "@/store/useEmailStore";
 
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectCategory: (category: string) => void;
   currentCategory?: string;
-  categories: string[];
   onCreateCategory: (category: string) => void;
 }
 
@@ -26,9 +26,9 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
   onClose,
   onSelectCategory,
   currentCategory,
-  categories,
   onCreateCategory,
 }: CategoryModalProps) => {
+  const { categories, loadCategories } = useEmailStore();
   const [newCategory, setNewCategory] =
     useState<CategoryModalState["newCategory"]>("");
   const [isCreating, setIsCreating] =
@@ -36,7 +36,17 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
   const [searchTerm, setSearchTerm] =
     useState<CategoryModalState["searchTerm"]>("");
 
-  const filteredCategories = categories.filter((category) =>
+  useEffect(() => {
+    if (isOpen) {
+      loadCategories();
+    }
+  }, [isOpen, loadCategories]);
+
+  const categoryNames = categories
+    .filter((cat) => cat.name !== null)
+    .map((cat) => cat.name as string);
+
+  const filteredCategories = categoryNames.filter((category) =>
     category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -78,7 +88,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
 
         <div className="space-y-6 py-4">
           {/* Search Bar */}
-          {categories.length > 0 && (
+          {categoryNames.length > 0 && (
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -138,7 +148,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                       )}
                     </Button>
                   ))
-                ) : categories.length > 0 ? (
+                ) : categoryNames.length > 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p className="font-medium">No categories found</p>
