@@ -24,24 +24,25 @@ export function EmailItem({
   onEmailSelect,
   selectedEmailId,
 }: EmailItemProps) {
-  const { markAsRead, loadEmailById } = useEmailStore();
+  const { markAsRead, loadEmailById, updateEmailCategory } = useEmailStore();
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  const handleSelectCategory = (category: string) => {
-    // TODO: Implement category assignment logic
-    console.log("Assigning category:", category, "to email:", email.id);
-    setIsCategoryModalOpen(false);
+  const handleSelectCategory = async (category: string) => {
+    try {
+      await updateEmailCategory(email.id, category);
+      setIsCategoryModalOpen(false);
+    } catch (error) {
+      console.error("Failed to update email category:", error);
+    }
   };
 
-  const handleCreateCategory = (category: string) => {
-    // TODO: Implement category creation and assignment logic
-    console.log(
-      "Creating and assigning category:",
-      category,
-      "to email:",
-      email.id
-    );
-    setIsCategoryModalOpen(false);
+  const handleCreateCategory = async (category: string) => {
+    try {
+      await updateEmailCategory(email.id, category);
+      setIsCategoryModalOpen(false);
+    } catch (error) {
+      console.error("Failed to create and assign category:", error);
+    }
   };
 
   const handleClick = async () => {

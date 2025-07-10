@@ -7,6 +7,7 @@ import {
   fetchEmailStats,
   markEmailAsRead,
   fetchCategories,
+  updateEmailCategory,
 } from "@/api/email";
 
 interface EmailStore {
@@ -29,6 +30,7 @@ interface EmailStore {
   loadEmailById: (id: string) => Promise<void>;
   loadEmailsByCategory: (category: string) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
+  updateEmailCategory: (id: string, category: string) => Promise<void>;
   setActiveFolder: (folder: EmailFolder) => void;
   setActiveCategory: (category: string | null) => void;
   setPage: (page: number) => void;
@@ -197,6 +199,30 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       set({ emails: updatedEmails });
     } catch (error) {
       console.error("Failed to mark email as read:", error);
+    }
+  },
+
+  updateEmailCategory: async (id: string, category: string) => {
+    try {
+      const updatedEmail = await updateEmailCategory(id, category);
+      const { emails, selectedEmail } = get();
+      
+      const updatedEmails = emails.map((email) =>
+        email.id === id ? { ...email, category } : email
+      );
+      
+      set({ 
+        emails: updatedEmails,
+        selectedEmail: selectedEmail?.id === id 
+          ? { ...selectedEmail, category } 
+          : selectedEmail
+      });
+      
+      console.log(`Updated email ${id} to category ${category}`);
+    } catch (error) {
+      console.error("Failed to update email category:", error);
+      set({ error: "Failed to update email category" });
+      throw error;
     }
   },
 

@@ -165,7 +165,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
             </ScrollArea>
           </div>
 
-          {/* Create New Category Section */}
+          {/* Create New Category Section
           <div className="border-t border-border pt-6">
             {!isCreating ? (
               <Button
@@ -233,7 +233,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({
                 </div>
               </div>
             )}
-          </div>
+          </div> */}
         </div>
       </DialogContent>
     </Dialog>
