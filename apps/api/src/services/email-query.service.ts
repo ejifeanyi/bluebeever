@@ -10,7 +10,7 @@ interface EmailFilters {
 
 interface PaginatedEmailsResult {
   emails: any[];
-  nextPageEmails?: any[]; // Predictive loading
+  nextPageEmails?: any[];
   pagination: {
     page: number;
     limit: number;
@@ -58,12 +58,11 @@ export class EmailQueryService {
       where.category = filters.category;
     }
 
-    // **PREDICTIVE LOADING**: Fetch current page + next page in one query
-    const extendedLimit = limit * 2; // Get 2x emails to include next page
+    const extendedLimit = limit * 2;
     const [allEmails, total] = await Promise.all([
       prisma.email.findMany({
         where,
-        orderBy: { date: "desc" }, // **SMART PRIORITIZATION**: Most recent first
+        orderBy: { date: "desc" },
         skip,
         take: extendedLimit,
         select: {
@@ -88,7 +87,6 @@ export class EmailQueryService {
       prisma.email.count({ where }),
     ]);
 
-    // Split results: current page vs next page
     const currentPageEmails = allEmails.slice(0, limit);
     const nextPageEmails = allEmails.slice(limit);
     const hasNextPage = skip + limit < total;
@@ -104,7 +102,6 @@ export class EmailQueryService {
       },
     };
 
-    // **PREDICTIVE LOADING**: Include next page data if available
     if (nextPageEmails.length > 0 && hasNextPage) {
       result.nextPageEmails = nextPageEmails;
     }
@@ -124,7 +121,6 @@ export class EmailQueryService {
       data: { isRead: true },
     });
 
-    // **REAL-TIME UPDATES**: Notify WebSocket service
     if (result.count > 0) {
       try {
         const { getWebSocketService } = await import("./websocket.service");
@@ -188,9 +184,6 @@ export class EmailQueryService {
     };
   }
 
-  /**
-   * **SMART PRIORITIZATION**: Get recent emails first for quick loading
-   */
   static async getRecentEmails(userId: string, limit: number = 20) {
     return prisma.email.findMany({
       where: { userId },

@@ -6,10 +6,8 @@ import { env } from "./config/env";
 
 const app = createApp();
 
-// **WEBSOCKET INTEGRATION**: Create HTTP server for WebSocket support
 const server = createServer(app);
 
-// **REAL-TIME UPDATES**: Initialize WebSocket service
 const wsService = initializeWebSocketService(server);
 console.log("🔌 WebSocket service initialized");
 
@@ -24,7 +22,6 @@ server.listen(env.PORT, () => {
 const gracefulShutdown = (signal: string) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
 
-  // Close WebSocket connections
   console.log("🔌 Closing WebSocket connections...");
 
   server.close(() => {
@@ -36,7 +33,6 @@ const gracefulShutdown = (signal: string) => {
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-// **CLEANUP**: Periodically clean up stuck sync jobs
 setInterval(
   async () => {
     try {
@@ -49,4 +45,4 @@ setInterval(
     }
   },
   5 * 60 * 1000
-); // Every 5 minutes
+);

@@ -8,7 +8,6 @@ import { EmailSyncJob, ParsedEmail, SyncStrategy } from "@crate/shared";
 import { getGoogleProfilePhoto } from "@/utils/jwt";
 import { getWebSocketService } from "./websocket.service";
 
-// Define local enum as fallback
 const LocalSyncStrategy = {
   QUICK: "quick",
   FULL: "full",
@@ -30,7 +29,7 @@ export class EmailSyncService {
 
     const syncState = await this.getSyncState(userId);
 
-    const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    const SYNC_TIMEOUT_MS = 30 * 60 * 1000; 
     const now = new Date();
     const lastUpdate = syncState.updatedAt || syncState.createdAt;
     const timeSinceLastUpdate = now.getTime() - lastUpdate.getTime();
@@ -75,7 +74,7 @@ export class EmailSyncService {
           jobId: `sync-${userId}-${strategy}-${Date.now()}`,
           removeOnComplete: 10,
           removeOnFail: 5,
-          timeout: 10 * 60 * 1000, // 10 minutes per job
+          timeout: 10 * 60 * 1000, 
         }
       );
     } catch (error) {
@@ -158,7 +157,7 @@ export class EmailSyncService {
           {
             priority: nextConfig.priority,
             delay: nextConfig.delay,
-            timeout: 10 * 60 * 1000, // 10 minutes timeout
+            timeout: 10 * 60 * 1000, 
           }
         );
       }
@@ -194,7 +193,7 @@ export class EmailSyncService {
   }
 
   static async cleanupStuckSyncs() {
-    const SYNC_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    const SYNC_TIMEOUT_MS = 30 * 60 * 1000;
     const cutoffTime = new Date(Date.now() - SYNC_TIMEOUT_MS);
 
     const stuckSyncs = await prisma.syncState.findMany({
@@ -302,11 +301,10 @@ export class EmailSyncService {
       return 0;
     }
 
-    // SMART PRIORITIZATION: Sort messages by date (newest first)
     const sortedMessages = newMessages.sort((a, b) => {
       const aDate = parseInt(a.internalDate || "0");
       const bDate = parseInt(b.internalDate || "0");
-      return bDate - aDate; // Newest first
+      return bDate - aDate; 
     });
 
     console.log(
@@ -345,7 +343,6 @@ export class EmailSyncService {
       Boolean
     ) as ParsedEmail[];
 
-    // Process emails in batches to maintain order
     const batchSize = 5;
     let processedCount = 0;
 
@@ -356,11 +353,9 @@ export class EmailSyncService {
       if (savedEmails.length > 0) {
         await this.queueEmailProcessing(savedEmails);
 
-        // REAL-TIME UPDATES: Notify connected clients immediately
         try {
           const wsService = getWebSocketService();
           if (wsService.isUserConnected(userId)) {
-            // Send individual notifications for recent emails
             savedEmails.forEach((email) => {
               wsService.notifyNewEmail(userId, email);
             });
@@ -439,13 +434,11 @@ export class EmailSyncService {
           },
         });
 
-        // Check if it's a new email
         if (result.createdAt.getTime() === result.updatedAt.getTime()) {
           successfulInserts.push(result);
         }
       } catch (error) {
         console.error(`Failed to insert email ${email.messageId}:`, error);
-        // Continue with other emails instead of failing completely
       }
     }
 

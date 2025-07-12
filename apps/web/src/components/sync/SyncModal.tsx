@@ -28,7 +28,7 @@ const SyncModal: React.FC<SyncModalProps> = ({
     loading,
     error,
     startQuickSync,
-    startForcedSync,d
+    startForcedSync,
     clearError,
     stopPolling,
   } = useSyncStore();

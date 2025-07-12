@@ -48,7 +48,6 @@ export class WebSocketService {
       ws.userId = decoded.userId;
       ws.isAuthenticated = true;
 
-      // Add client to user's connection set
       if (!this.clients.has(decoded.userId)) {
         this.clients.set(decoded.userId, new Set());
       }
@@ -80,7 +79,6 @@ export class WebSocketService {
     }
   }
 
-  // Broadcast to specific user
   public notifyUser(userId: string, message: WebSocketMessage) {
     const userClients = this.clients.get(userId);
     if (!userClients) return;
@@ -93,7 +91,6 @@ export class WebSocketService {
     });
   }
 
-  // Broadcast new email notification
   public notifyNewEmail(userId: string, email: any) {
     this.notifyUser(userId, {
       type: "new_email",
@@ -108,7 +105,6 @@ export class WebSocketService {
     });
   }
 
-  // Broadcast email read status change
   public notifyEmailRead(userId: string, emailId: string) {
     this.notifyUser(userId, {
       type: "email_read",
@@ -116,7 +112,6 @@ export class WebSocketService {
     });
   }
 
-  // Broadcast sync status updates
   public notifySyncStatus(userId: string, status: any) {
     this.notifyUser(userId, {
       type: "sync_status",
@@ -124,7 +119,6 @@ export class WebSocketService {
     });
   }
 
-  // Simple refresh signal
   public notifyRefreshEmails(userId: string) {
     this.notifyUser(userId, {
       type: "refresh_emails",
@@ -140,7 +134,6 @@ export class WebSocketService {
   }
 }
 
-// Singleton instance
 let webSocketService: WebSocketService | null = null;
 
 export const initializeWebSocketService = (
