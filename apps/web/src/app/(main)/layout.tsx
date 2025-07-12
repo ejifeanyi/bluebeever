@@ -8,11 +8,14 @@ import LoadingLayout from "@/components/skeletons/LoadingLayout";
 import Header from "@/components/nav/Header";
 import Sidebar from "@/components/nav/Sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Wifi, WifiOff } from "lucide-react";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
   const { user, loading, fetchUser } = useAuthStore();
   const [mounted, setMounted] = useState(false);
+  const { isConnected } = useWebSocket();
 
   useEffect(() => {
     setMounted(true);
@@ -31,8 +34,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (!user && !loading) {
       fetchUser();
     }
-    // eslint-disable-next-line
-  }, [mounted]);
+  }, [mounted, user, loading, fetchUser, router]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -43,7 +45,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         router.replace("/login");
       }
     }
-    // eslint-disable-next-line
   }, [loading, user, router, mounted]);
 
   if (!mounted || loading || (mounted && Cookies.get("token") && !user)) {
@@ -74,6 +75,27 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         userName={user.name}
         userImage={user.picture}
       />
+      
+      {/* Connection Status Indicator */}
+      <div className="flex items-center justify-between px-6 py-1 bg-muted/50 text-xs">
+        <div className="flex items-center gap-2">
+          {isConnected ? (
+            <>
+              <Wifi className="h-3 w-3 text-green-500" />
+              <span className="text-green-600">Connected</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-3 w-3 text-orange-500" />
+              <span className="text-orange-600">Reconnecting...</span>
+            </>
+          )}
+        </div>
+        <div className="text-muted-foreground">
+          Real-time updates {isConnected ? 'active' : 'paused'}
+        </div>
+      </div>
+
       <div className="flex">
         <Sidebar />
         <main className="flex-1 overflow-hidden">

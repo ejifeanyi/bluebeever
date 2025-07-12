@@ -24,6 +24,10 @@ interface EmailStore {
   totalCount: number;
   hasMore: boolean;
   abortController: AbortController | null;
+  
+  // Predictive loading cache
+  nextPageCache: Email[] | null;
+  isLoadingNextPage: boolean;
 
   loadEmails: () => Promise<void>;
   loadCategories: () => Promise<void>;
@@ -36,6 +40,10 @@ interface EmailStore {
   setPage: (page: number) => void;
   loadStats: () => Promise<void>;
   clearError: () => void;
+  
+  // Predictive loading methods
+  preloadNextPage: () => Promise<void>;
+  getNextPageFromCache: () => Email[] | null;
 }
 
 export const useEmailStore = create<EmailStore>((set, get) => ({
@@ -52,6 +60,8 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   totalCount: 0,
   hasMore: false,
   abortController: null,
+  nextPageCache: null,
+  isLoadingNextPage: false,
 
   loadEmails: async () => {
     const { activeFolder, activeCategory, page } = get();
@@ -66,6 +76,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       loading: true,
       error: null,
       abortController: newAbortController,
+      nextPageCache: null, // Clear cache on new load
     });
 
     try {
@@ -91,8 +102,6 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         return;
       }
 
-      console.log("Loaded emails:", response.emails);
-
       set({
         emails: response.emails,
         totalPages: response.totalPages,
@@ -101,6 +110,11 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         loading: false,
         abortController: null,
       });
+
+      // Preload next page if available
+      if (response.hasMore && page < response.totalPages) {
+        get().preloadNextPage();
+      }
     } catch (error: any) {
       if (error.name === "AbortError") {
         return;
@@ -112,6 +126,65 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         loading: false,
         abortController: null,
       });
+    }
+  },
+
+  preloadNextPage: async () => {
+    const { activeFolder, activeCategory, page, isLoadingNextPage, totalPages } = get();
+    
+    if (isLoadingNextPage || page >= totalPages) return;
+
+    set({ isLoadingNextPage: true });
+
+    try {
+      const nextPage = page + 1;
+      let response;
+
+      if (activeCategory) {
+        response = await fetchEmailsByCategory({
+          category: activeCategory,
+          page: nextPage,
+          limit: 20,
+        });
+      } else {
+        response = await fetchEmails({
+          page: nextPage,
+          folder: activeFolder,
+          limit: 20,
+        });
+      }
+
+      set({
+        nextPageCache: response.emails,
+        isLoadingNextPage: false,
+      });
+    } catch (error) {
+      console.error("Failed to preload next page:", error);
+      set({ isLoadingNextPage: false });
+    }
+  },
+
+  getNextPageFromCache: () => {
+    const { nextPageCache } = get();
+    return nextPageCache;
+  },
+
+  setPage: (page: number) => {
+    const { nextPageCache } = get();
+    
+    // If we're going to the next page and have cached data, use it
+    if (page === get().page + 1 && nextPageCache) {
+      set({
+        page,
+        emails: nextPageCache,
+        nextPageCache: null,
+      });
+      
+      // Preload the next page after this one
+      get().preloadNextPage();
+    } else {
+      set({ page });
+      get().loadEmails();
     }
   },
 
@@ -128,6 +201,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       loading: true,
       error: null,
       abortController: newAbortController,
+      nextPageCache: null,
     });
 
     try {
@@ -142,8 +216,6 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         return;
       }
 
-      console.log(`Loaded emails for category ${category}:`, response.emails);
-
       set({
         emails: response.emails,
         totalPages: response.totalPages,
@@ -154,6 +226,11 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
         loading: false,
         abortController: null,
       });
+
+      // Preload next page
+      if (response.hasMore) {
+        get().preloadNextPage();
+      }
     } catch (error: any) {
       if (error.name === "AbortError") {
         return;
@@ -171,7 +248,6 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   loadEmailById: async (id: string) => {
     try {
       const email = await fetchEmailById(id);
-      console.log("Loaded email body:", email);
       set({ selectedEmail: email });
     } catch (error) {
       console.error("Failed to load email:", error);
@@ -217,8 +293,6 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
           ? { ...selectedEmail, category } 
           : selectedEmail
       });
-      
-      console.log(`Updated email ${id} to category ${category}`);
     } catch (error) {
       console.error("Failed to update email category:", error);
       set({ error: "Failed to update email category" });
@@ -232,6 +306,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       activeCategory: null,
       page: 1,
       selectedEmail: null,
+      nextPageCache: null,
     });
     get().loadEmails();
   },
@@ -242,6 +317,7 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
       activeFolder: "inbox",
       page: 1,
       selectedEmail: null,
+      nextPageCache: null,
     });
 
     if (category) {
@@ -249,11 +325,6 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
     } else {
       get().loadEmails();
     }
-  },
-
-  setPage: (page: number) => {
-    set({ page });
-    get().loadEmails();
   },
 
   loadStats: async () => {

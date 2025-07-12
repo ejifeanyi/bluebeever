@@ -1,3 +1,4 @@
+// api/email.ts - Enhanced version with smart prioritization
 import Cookies from "js-cookie";
 import {
   Email,
@@ -18,6 +19,22 @@ const getAuthHeaders = () => {
   };
 };
 
+// Smart email prioritization - sort by recency and importance
+function prioritizeEmails(emails: Email[]): Email[] {
+  return emails.sort((a, b) => {
+    // Priority 1: Unread emails first
+    if (a.isRead !== b.isRead) {
+      return a.isRead ? 1 : -1;
+    }
+
+    // Priority 2: Recent emails first
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+
+    return dateB - dateA;
+  });
+}
+
 export async function fetchEmails({
   page = 1,
   limit = 20,
@@ -37,6 +54,9 @@ export async function fetchEmails({
 
   params.append("page", page.toString());
   params.append("limit", limit.toString());
+
+  // Add smart prioritization flag
+  params.append("prioritize", "true");
 
   if (search) params.append("search", search);
   if (filters?.isRead !== undefined)
@@ -60,13 +80,14 @@ export async function fetchEmails({
 
   const data = await response.json();
 
-  console.log("Fetched emails:", data);
-
   let filteredEmails = data.data?.emails || [];
 
   if (folder) {
     filteredEmails = filterEmailsByFolder(filteredEmails, folder);
   }
+
+  // Apply smart prioritization
+  filteredEmails = prioritizeEmails(filteredEmails);
 
   const totalCount = filteredEmails.length;
   const totalPages = Math.ceil(totalCount / limit);
@@ -102,6 +123,7 @@ export async function fetchEmailsByCategory({
 
   params.append("page", page.toString());
   params.append("limit", limit.toString());
+  params.append("prioritize", "true"); // Smart prioritization
 
   if (search) params.append("search", search);
   if (filters?.isRead !== undefined)
@@ -126,20 +148,11 @@ export async function fetchEmailsByCategory({
 
       if (!response.ok) {
         if (response.status >= 500 && retries > 1) {
-          console.warn(
-            `Server error (${response.status}), retrying in ${delay}ms...`
-          );
           await new Promise((resolve) => setTimeout(resolve, delay));
           delay *= 2;
           retries--;
           continue;
         }
-
-        console.error("Response failed:");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("URL:", url);
-        console.error("Category:", category);
 
         throw new Error(
           `HTTP ${response.status}: Failed to fetch emails for category: ${category}`
@@ -147,10 +160,14 @@ export async function fetchEmailsByCategory({
       }
 
       const data = await response.json();
-      console.log(`Fetched emails for category ${category}:`, data);
+
+      let emails = data.data?.emails || [];
+
+      // Apply smart prioritization
+      emails = prioritizeEmails(emails);
 
       return {
-        emails: data.data?.emails || [],
+        emails,
         page: data.data?.page || page,
         totalPages: data.data?.totalPages || 1,
         totalCount: data.data?.totalCount || 0,
@@ -162,7 +179,6 @@ export async function fetchEmailsByCategory({
       }
 
       if (retries > 1) {
-        console.warn(`Network error, retrying in ${delay}ms...`, error);
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay *= 2;
         retries--;
@@ -221,7 +237,6 @@ export async function fetchEmailById(id: string): Promise<Email> {
   }
 
   const data = await response.json();
-  console.log("data mail: ", data);
   return data.data;
 }
 
@@ -246,7 +261,6 @@ export async function fetchCategories(): Promise<Category[]> {
   }
 
   const data = await response.json();
-
   return data.data || [];
 }
 
@@ -297,5 +311,8 @@ export async function searchEmails(query: string): Promise<Email[]> {
   }
 
   const data = await response.json();
-  return Array.isArray(data) ? data : data.data || [];
+  const emails = Array.isArray(data) ? data : data.data || [];
+
+  // Apply smart prioritization to search results
+  return prioritizeEmails(emails);
 }
