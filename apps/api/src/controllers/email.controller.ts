@@ -6,6 +6,7 @@ import { EmailSyncService } from '@/services/email-sync.service';
 import { EmailQueryService } from '@/services/email-query.service';
 import { EmailCategoryService } from '@/services/email-category.service';
 import { prisma } from '@/config/database';
+import { getWebSocketService } from '@/services/websocket.service';
 
 export class EmailController {
   static async quickSync(req: AuthenticatedRequest, res: Response) {
@@ -192,7 +193,16 @@ export class EmailController {
         filters
       );
 
-      res.json(createSuccessResponse(result));
+      // **PREDICTIVE LOADING**: Include next page data in response
+      const response = {
+        ...result,
+        meta: {
+          predictiveLoadingEnabled: !!result.nextPageEmails,
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      res.json(createSuccessResponse(response));
     } catch (error) {
       console.error("Get emails error:", error);
       res
@@ -201,6 +211,39 @@ export class EmailController {
           createErrorResponse(
             ERROR_CODES.INTERNAL_ERROR,
             "Failed to fetch emails"
+          )
+        );
+    }
+  }
+
+  static async getRecentEmails(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res
+          .status(401)
+          .json(
+            createErrorResponse(
+              ERROR_CODES.UNAUTHORIZED,
+              "User not authenticated"
+            )
+          );
+      }
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+      const emails = await EmailQueryService.getRecentEmails(
+        req.user.userId,
+        limit
+      );
+
+      res.json(createSuccessResponse({ emails }, "Recent emails fetched"));
+    } catch (error) {
+      console.error("Get recent emails error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            ERROR_CODES.INTERNAL_ERROR,
+            "Failed to fetch recent emails"
           )
         );
     }
@@ -264,6 +307,7 @@ export class EmailController {
           .json(createErrorResponse(ERROR_CODES.NOT_FOUND, "Email not found"));
       }
 
+      // **REAL-TIME UPDATES**: WebSocket notification is handled in EmailQueryService.markAsRead
       res.json(createSuccessResponse(null, "Email marked as read"));
     } catch (error) {
       console.error("Mark email as read error:", error);
@@ -273,6 +317,43 @@ export class EmailController {
           createErrorResponse(
             ERROR_CODES.INTERNAL_ERROR,
             "Failed to mark email as read"
+          )
+        );
+    }
+  }
+
+  static async getConnectionStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res
+          .status(401)
+          .json(
+            createErrorResponse(
+              ERROR_CODES.UNAUTHORIZED,
+              "User not authenticated"
+            )
+          );
+      }
+
+      const wsService = getWebSocketService();
+      const isConnected = wsService.isUserConnected(req.user.userId);
+      const connectedUsers = wsService.getConnectedUsers();
+
+      res.json(
+        createSuccessResponse({
+          isConnected,
+          connectedUsersCount: connectedUsers.length,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    } catch (error) {
+      console.error("Get connection status error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            ERROR_CODES.INTERNAL_ERROR,
+            "Failed to get connection status"
           )
         );
     }
@@ -315,6 +396,16 @@ export class EmailController {
         return res
           .status(404)
           .json(createErrorResponse(ERROR_CODES.NOT_FOUND, "Email not found"));
+      }
+
+      // REAL-TIME UPDATES: Notify connected clients
+      try {
+        const wsService = getWebSocketService();
+        if (wsService.isUserConnected(req.user.userId)) {
+          wsService.notifyRefreshEmails(req.user.userId);
+        }
+      } catch (error) {
+        console.log("WebSocket service not available:", error);
       }
 
       res.json(createSuccessResponse(result, "Email category updated"));

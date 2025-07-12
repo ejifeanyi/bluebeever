@@ -6,6 +6,7 @@ import { AuthService } from "./auth.service";
 import { emailSyncQueue, emailProcessingQueue } from "@/config/queue";
 import { EmailSyncJob, ParsedEmail, SyncStrategy } from "@crate/shared";
 import { getGoogleProfilePhoto } from "@/utils/jwt";
+import { getWebSocketService } from "./websocket.service";
 
 // Define local enum as fallback
 const LocalSyncStrategy = {
@@ -287,8 +288,7 @@ export class EmailSyncService {
   ): Promise<number> {
     if (messages.length === 0) return 0;
 
-    const user = await UserService.findById(userId); // Get user for accessToken
-
+    const user = await UserService.findById(userId);
     const existingMessageIds = await this.getExistingMessageIds(
       messages.map((m) => m.id!).filter(Boolean)
     );
@@ -296,16 +296,24 @@ export class EmailSyncService {
     const newMessages = messages.filter(
       (m) => m.id && !existingMessageIds.has(m.id)
     );
+
     if (newMessages.length === 0) {
       console.log("No new messages to process");
       return 0;
     }
 
+    // SMART PRIORITIZATION: Sort messages by date (newest first)
+    const sortedMessages = newMessages.sort((a, b) => {
+      const aDate = parseInt(a.internalDate || "0");
+      const bDate = parseInt(b.internalDate || "0");
+      return bDate - aDate; // Newest first
+    });
+
     console.log(
-      `Processing ${newMessages.length} new messages out of ${messages.length}`
+      `Processing ${sortedMessages.length} new messages out of ${messages.length} (sorted by recency)`
     );
 
-    const emailPromises = newMessages.map(async (message) => {
+    const emailPromises = sortedMessages.map(async (message) => {
       try {
         const fullMessage = await gmail.users.messages.get({
           userId: "me",
@@ -314,11 +322,10 @@ export class EmailSyncService {
         });
         const parsed = this.parseGmailMessage(fullMessage.data, userId);
         if (!parsed) return null;
-        // Extract sender email address (e.g., "Name <email@domain.com>")
+
         const match = parsed.from.match(/<(.+?)>/);
         const senderEmail = match ? match[1] : parsed.from;
 
-        // Fetch avatar
         let avatarUrl: string | null = null;
         if (user?.accessToken && senderEmail) {
           avatarUrl = await getGoogleProfilePhoto(
@@ -337,13 +344,36 @@ export class EmailSyncService {
     const parsedEmails = (await Promise.all(emailPromises)).filter(
       Boolean
     ) as ParsedEmail[];
-    const savedEmails = await this.batchInsertEmails(parsedEmails);
 
-    if (savedEmails.length > 0) {
-      await this.queueEmailProcessing(savedEmails);
+    // Process emails in batches to maintain order
+    const batchSize = 5;
+    let processedCount = 0;
+
+    for (let i = 0; i < parsedEmails.length; i += batchSize) {
+      const batch = parsedEmails.slice(i, i + batchSize);
+      const savedEmails = await this.batchInsertEmails(batch);
+
+      if (savedEmails.length > 0) {
+        await this.queueEmailProcessing(savedEmails);
+
+        // REAL-TIME UPDATES: Notify connected clients immediately
+        try {
+          const wsService = getWebSocketService();
+          if (wsService.isUserConnected(userId)) {
+            // Send individual notifications for recent emails
+            savedEmails.forEach((email) => {
+              wsService.notifyNewEmail(userId, email);
+            });
+          }
+        } catch (error) {
+          console.log("WebSocket service not available:", error);
+        }
+      }
+
+      processedCount += savedEmails.length;
     }
 
-    return savedEmails.length;
+    return processedCount;
   }
 
   private static async getExistingMessageIds(

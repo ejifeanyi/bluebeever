@@ -1,4 +1,4 @@
-import { prisma } from '@/config/database';
+import { prisma } from "@/config/database";
 
 interface EmailFilters {
   isRead?: boolean;
@@ -8,6 +8,18 @@ interface EmailFilters {
   category?: string;
 }
 
+interface PaginatedEmailsResult {
+  emails: any[];
+  nextPageEmails?: any[]; // Predictive loading
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    hasNextPage: boolean;
+  };
+}
+
 export class EmailQueryService {
   static async getUserEmails(
     userId: string,
@@ -15,16 +27,16 @@ export class EmailQueryService {
     limit: number = 50,
     search?: string,
     filters?: EmailFilters
-  ) {
+  ): Promise<PaginatedEmailsResult> {
     const skip = (page - 1) * limit;
-    
+
     const where: any = { userId };
 
     if (search) {
       where.OR = [
-        { subject: { contains: search, mode: 'insensitive' } },
-        { from: { contains: search, mode: 'insensitive' } },
-        { snippet: { contains: search, mode: 'insensitive' } },
+        { subject: { contains: search, mode: "insensitive" } },
+        { from: { contains: search, mode: "insensitive" } },
+        { snippet: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -46,12 +58,14 @@ export class EmailQueryService {
       where.category = filters.category;
     }
 
-    const [emails, total] = await Promise.all([
+    // **PREDICTIVE LOADING**: Fetch current page + next page in one query
+    const extendedLimit = limit * 2; // Get 2x emails to include next page
+    const [allEmails, total] = await Promise.all([
       prisma.email.findMany({
         where,
-        orderBy: { date: 'desc' },
+        orderBy: { date: "desc" }, // **SMART PRIORITIZATION**: Most recent first
         skip,
-        take: limit,
+        take: extendedLimit,
         select: {
           id: true,
           threadId: true,
@@ -68,20 +82,34 @@ export class EmailQueryService {
           categoryConfidence: true,
           categoryDescription: true,
           categorizedAt: true,
+          avatarUrl: true,
         },
       }),
       prisma.email.count({ where }),
     ]);
 
-    return {
-      emails,
+    // Split results: current page vs next page
+    const currentPageEmails = allEmails.slice(0, limit);
+    const nextPageEmails = allEmails.slice(limit);
+    const hasNextPage = skip + limit < total;
+
+    const result: PaginatedEmailsResult = {
+      emails: currentPageEmails,
       pagination: {
         page,
         limit,
         total,
         pages: Math.ceil(total / limit),
+        hasNextPage,
       },
     };
+
+    // **PREDICTIVE LOADING**: Include next page data if available
+    if (nextPageEmails.length > 0 && hasNextPage) {
+      result.nextPageEmails = nextPageEmails;
+    }
+
+    return result;
   }
 
   static async getEmailById(userId: string, id: string) {
@@ -91,20 +119,36 @@ export class EmailQueryService {
   }
 
   static async markAsRead(userId: string, id: string) {
-    return prisma.email.updateMany({
+    const result = await prisma.email.updateMany({
       where: { userId, id },
       data: { isRead: true },
     });
+
+    // **REAL-TIME UPDATES**: Notify WebSocket service
+    if (result.count > 0) {
+      try {
+        const { getWebSocketService } = await import("./websocket.service");
+        const wsService = getWebSocketService();
+        if (wsService.isUserConnected(userId)) {
+          wsService.notifyEmailRead(userId, id);
+        }
+      } catch (error) {
+        console.log("WebSocket service not available:", error);
+      }
+    }
+
+    return result;
   }
 
   static async getUserEmailStats(userId: string) {
-    const [total, unread, withAttachments, categorized, syncState] = await Promise.all([
-      prisma.email.count({ where: { userId } }),
-      prisma.email.count({ where: { userId, isRead: false } }),
-      prisma.email.count({ where: { userId, hasAttachments: true } }),
-      prisma.email.count({ where: { userId, category: { not: null } } }),
-      prisma.syncState.findUnique({ where: { userId } }),
-    ]);
+    const [total, unread, withAttachments, categorized, syncState] =
+      await Promise.all([
+        prisma.email.count({ where: { userId } }),
+        prisma.email.count({ where: { userId, isRead: false } }),
+        prisma.email.count({ where: { userId, hasAttachments: true } }),
+        prisma.email.count({ where: { userId, category: { not: null } } }),
+        prisma.syncState.findUnique({ where: { userId } }),
+      ]);
 
     const lastSyncAt = syncState?.lastSyncAt;
     const syncInProgress = syncState?.syncInProgress || false;
@@ -142,5 +186,27 @@ export class EmailQueryService {
       lastSyncAt: syncState.lastSyncAt,
       emailCount,
     };
+  }
+
+  /**
+   * **SMART PRIORITIZATION**: Get recent emails first for quick loading
+   */
+  static async getRecentEmails(userId: string, limit: number = 20) {
+    return prisma.email.findMany({
+      where: { userId },
+      orderBy: { date: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        subject: true,
+        from: true,
+        snippet: true,
+        isRead: true,
+        date: true,
+        hasAttachments: true,
+        category: true,
+        avatarUrl: true,
+      },
+    });
   }
 }
