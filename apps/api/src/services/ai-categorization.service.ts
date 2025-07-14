@@ -1,4 +1,4 @@
-import { env } from '@/config/env';
+import { env } from "@/config/env";
 
 interface CategoryResult {
   assigned_category: string;
@@ -14,60 +14,116 @@ interface AiServiceResponse {
   is_new_category?: boolean;
 }
 
+interface BatchCategoryResult extends CategoryResult {
+  email_id: string;
+}
 
+interface BatchAiServiceResponse {
+  results: Array<{
+    email_id: string;
+    assigned_category?: string;
+    confidence_score?: number;
+    category_description?: string;
+    is_new_category?: boolean;
+  }>;
+}
 
 export class AiCategorizationService {
+  // Original single email categorization
   static async categorizeEmail(email: any): Promise<CategoryResult> {
     try {
-     const response = await fetch(`${env.AI_SERVICE_URL}/categorize/standalone`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email_id: email.id || email.messageId,
-          user_id: email.userId,
-          subject: email.subject,
-          body: email.body,
-          snippet: email.snippet,
-          sender_email: email.from,
-          recipient_emails: email.to,
-          timestamp: email.date,
-          labels: email.labels,
-        }),
-      });
+      const response = await fetch(
+        `${env.AI_SERVICE_URL}/categorize/standalone`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email_id: email.id || email.messageId,
+            user_id: email.userId,
+            subject: email.subject,
+            body: email.body,
+            snippet: email.snippet,
+            sender_email: email.from,
+            recipient_emails: email.to,
+            timestamp: email.date,
+            labels: email.labels,
+          }),
+        }
+      );
+
       if (!response.ok) {
         throw new Error(`AI service error: ${response.status}`);
       }
 
-      const result = await response.json() as AiServiceResponse;
-      console.log('AI categorization result:', result);
-      
+      const result = (await response.json()) as AiServiceResponse;
+
       return {
-        assigned_category: result.assigned_category || 'Other',
+        assigned_category: result.assigned_category || "Other",
         confidence_score: result.confidence_score ?? 0.5,
-        category_description: result.category_description || 'AI categorized email',
+        category_description:
+          result.category_description || "AI categorized email",
         is_new_category: result.is_new_category ?? false,
       };
     } catch (error) {
-      console.error('AI categorization failed:', error);
-
-      /*
-AI categorization result: {
-  email_id: 'cmch0a6y500edmtec402q5f72',
-  user_id: 'cmce6r9lr00005sz3opnmysig',
-  assigned_category: 'Jobs Related',
-  confidence_score: 0.8080222901591054,
-  is_new_category: false,
-  processing_timestamp: '2025-06-29T03:07:14.887184',
-  category_description: 'Auto-generated: 30+ new jobs in Canada...'
-}
-      */
-      
+      console.error("AI categorization failed:", error);
       return {
         assigned_category: this.fallbackCategory(email),
         confidence_score: 0.1,
-        category_description: 'Fallback category due to AI service error',
+        category_description: "Fallback category due to AI service error",
         is_new_category: false,
       };
+    }
+  }
+
+  // New batch categorization
+  static async categorizeEmailBatch(
+    emails: any[]
+  ): Promise<BatchCategoryResult[]> {
+    if (!emails.length) return [];
+
+    try {
+      const response = await fetch(`${env.AI_SERVICE_URL}/categorize/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emails: emails.map((email) => ({
+            email_id: email.id || email.messageId,
+            user_id: email.userId,
+            subject: email.subject,
+            body: email.body,
+            snippet: email.snippet,
+            sender_email: email.from,
+            recipient_emails: email.to,
+            timestamp: email.date,
+            labels: email.labels,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI batch service error: ${response.status}`);
+      }
+
+      const result = (await response.json()) as BatchAiServiceResponse;
+
+      return result.results.map((r) => ({
+        email_id: r.email_id,
+        assigned_category: r.assigned_category || "Other",
+        confidence_score: r.confidence_score ?? 0.5,
+        category_description: r.category_description || "AI categorized email",
+        is_new_category: r.is_new_category ?? false,
+      }));
+    } catch (error) {
+      console.error("AI batch categorization failed:", error);
+
+      // Fallback to individual categorization for each email
+      return emails.map((email) => ({
+        email_id: email.id || email.messageId,
+        assigned_category: this.fallbackCategory(email),
+        confidence_score: 0.1,
+        category_description: "Fallback category due to AI service error",
+        is_new_category: false,
+      }));
     }
   }
 
@@ -85,58 +141,78 @@ AI categorization result: {
     }>;
   }): Promise<CategoryResult> {
     try {
-      const response = await fetch(`${env.AI_SERVICE_URL}/categorize/threaded`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(thread),
-      });
+      const response = await fetch(
+        `${env.AI_SERVICE_URL}/categorize/threaded`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(thread),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`AI service error: ${response.status}`);
       }
 
-      const result = await response.json() as AiServiceResponse;
-      console.log('AI categorization result:', result);
+      const result = (await response.json()) as AiServiceResponse;
 
       return {
-        assigned_category: result.assigned_category || 'Other',
+        assigned_category: result.assigned_category || "Other",
         confidence_score: result.confidence_score || 0.5,
-        category_description: result.category_description || 'AI categorized thread',
+        category_description:
+          result.category_description || "AI categorized thread",
         is_new_category: result.is_new_category || false,
       };
     } catch (error) {
-      console.error('AI thread categorization failed:', error);
+      console.error("AI thread categorization failed:", error);
 
       return {
-        assigned_category: 'Other',
+        assigned_category: "Other",
         confidence_score: 0.1,
-        category_description: 'Fallback category due to AI service error',
+        category_description: "Fallback category due to AI service error",
         is_new_category: false,
       };
     }
   }
 
   private static fallbackCategory(email: any): string {
-    const subject = email.subject?.toLowerCase() || '';
-    const from = email.from?.toLowerCase() || '';
-    
-    if (subject.includes('bill') || subject.includes('invoice') || subject.includes('payment')) {
-      return 'Bills';
+    const subject = email.subject?.toLowerCase() || "";
+    const from = email.from?.toLowerCase() || "";
+
+    if (
+      subject.includes("bill") ||
+      subject.includes("invoice") ||
+      subject.includes("payment")
+    ) {
+      return "Bills";
     }
-    
-    if (subject.includes('promotion') || subject.includes('sale') || subject.includes('discount') || 
-        from.includes('no-reply') || from.includes('noreply')) {
-      return 'Promotions';
+
+    if (
+      subject.includes("promotion") ||
+      subject.includes("sale") ||
+      subject.includes("discount") ||
+      from.includes("no-reply") ||
+      from.includes("noreply")
+    ) {
+      return "Promotions";
     }
-    
-    if (from.includes('linkedin') || from.includes('github') || from.includes('slack')) {
-      return 'Work';
+
+    if (
+      from.includes("linkedin") ||
+      from.includes("github") ||
+      from.includes("slack")
+    ) {
+      return "Work";
     }
-    
-    if (subject.includes('urgent') || subject.includes('important') || subject.includes('asap')) {
-      return 'Important';
+
+    if (
+      subject.includes("urgent") ||
+      subject.includes("important") ||
+      subject.includes("asap")
+    ) {
+      return "Important";
     }
-    
-    return 'Personal';
+
+    return "Personal";
   }
 }
