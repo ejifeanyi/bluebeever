@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import dotenv from 'dotenv';
+import { z } from "zod";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -10,22 +10,31 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default('7d'),
-  PORT: z.string().transform(Number).default('4000'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  JWT_EXPIRES_IN: z.string().default("7d"),
+  PORT: z.string().transform(Number).default("4000"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
+  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   REDIS_HOST: z.string().min(1),
   REDIS_PORT: z.string().transform(Number),
   REDIS_PASSWORD: z.string().min(1),
-  AI_SERVICE_URL: z.string().url(), 
+  AI_SERVICE_URL: z.string().url(),
+  DB_CONNECTION_LIMIT: z.string().transform(Number).default("10"),
+  DB_CONNECT_TIMEOUT: z.string().transform(Number).default("5000"),
+  DB_POOL_TIMEOUT: z.string().transform(Number).default("5000"),
+  DB_MAX_CONNECTION_LIFETIME: z.string().transform(Number).default("300"),
+  DB_MAX_IDLE_LIFETIME: z.string().transform(Number).default("60"),
 });
 
 const parseEnv = () => {
   try {
     return envSchema.parse(process.env);
   } catch (error) {
-    console.error('❌ Invalid environment variables:', error);
-    console.error('Missing or invalid environment variables. Please check your .env file.');
+    console.error("❌ Invalid environment variables:", error);
+    console.error(
+      "Missing or invalid environment variables. Please check your .env file."
+    );
     process.exit(1);
   }
 };
