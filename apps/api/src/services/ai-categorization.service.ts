@@ -7,7 +7,6 @@ interface CategoryResult {
   is_new_category: boolean;
 }
 
-// Type for the AI service response
 interface AiServiceResponse {
   assigned_category?: string;
   confidence_score?: number;

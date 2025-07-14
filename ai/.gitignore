@@ -1,6 +1,9 @@
 env
 .env
 test.db
+dev_email_categorization.db
 .env.production
 .env.development
 .env.staging
+venv
+logs
