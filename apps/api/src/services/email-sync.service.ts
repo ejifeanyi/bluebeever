@@ -4,17 +4,21 @@ import { emailSyncQueue } from "@/config/queue";
 import { EmailSyncJob } from "@crate/shared";
 import { BatchSyncWorker } from "@/workers/batch-sync.worker";
 import { BATCH_CONFIG, SyncStrategy } from "@/config/batch";
+import { RETRY_CONFIGS, withRetry } from "@/utils/retry";
 
 export class EmailSyncService {
   static async initiateSync(userId: string, strategy: SyncStrategy = "quick") {
-    const user = await UserService.findById(userId);
+    const user = await withRetry(
+      () => UserService.findById(userId),
+      RETRY_CONFIGS.database
+    );
+
     if (!user?.accessToken) {
       throw new Error("User access token not found");
     }
 
     const syncState = await this.getSyncState(userId);
 
-    // Check for sync timeout
     if (await this.handleSyncTimeout(userId, syncState)) {
       const refreshedState = await this.getSyncState(userId);
       Object.assign(syncState, refreshedState);
@@ -24,7 +28,6 @@ export class EmailSyncService {
       throw new Error("Sync already in progress for this user");
     }
 
-    // Update sync state
     await this.updateSyncState(userId, {
       syncInProgress: true,
       nextPageToken: strategy === "full" ? null : syncState.nextPageToken,
@@ -33,23 +36,27 @@ export class EmailSyncService {
     const config = BATCH_CONFIG.SYNC_CONFIGS[strategy];
 
     try {
-      await emailSyncQueue.add(
-        "sync-user-emails",
-        {
-          userId,
-          maxResults: config.batchSize,
-          strategy,
-          pageToken: strategy === "full" ? null : syncState.nextPageToken,
-          isInitialSync: syncState.isInitialSyncing,
-        } as EmailSyncJob,
-        {
-          priority: config.priority,
-          delay: config.delay,
-          jobId: `sync-${userId}-${strategy}-${Date.now()}`,
-          removeOnComplete: 10,
-          removeOnFail: 5,
-          timeout: BATCH_CONFIG.JOB_TIMEOUT_MS,
-        }
+      await withRetry(
+        () =>
+          emailSyncQueue.add(
+            "sync-user-emails",
+            {
+              userId,
+              maxResults: config.batchSize,
+              strategy,
+              pageToken: strategy === "full" ? null : syncState.nextPageToken,
+              isInitialSync: syncState.isInitialSyncing,
+            } as EmailSyncJob,
+            {
+              priority: config.priority,
+              delay: config.delay,
+              jobId: `sync-${userId}-${strategy}-${Date.now()}`,
+              removeOnComplete: 10,
+              removeOnFail: 5,
+              timeout: BATCH_CONFIG.JOB_TIMEOUT_MS,
+            }
+          ),
+        RETRY_CONFIGS.queue
       );
 
       console.log(`✅ ${strategy} sync initiated for user ${userId}`);
@@ -66,7 +73,10 @@ export class EmailSyncService {
   }
 
   static async processEmailSync(job: any) {
-    return BatchSyncWorker.processEmailSync(job);
+    return withRetry(
+      () => BatchSyncWorker.processEmailSync(job),
+      RETRY_CONFIGS.api
+    );
   }
 
   static async resetSyncState(userId: string) {
@@ -83,63 +93,63 @@ export class EmailSyncService {
   static async cleanupStuckSyncs() {
     const cutoffTime = new Date(Date.now() - BATCH_CONFIG.SYNC_TIMEOUT_MS);
 
-    const stuckSyncs = await prisma.syncState.findMany({
-      where: {
-        syncInProgress: true,
-        updatedAt: { lt: cutoffTime },
-      },
-    });
-
-    if (stuckSyncs.length > 0) {
-      console.log(`Found ${stuckSyncs.length} stuck syncs, resetting...`);
-
-      await prisma.syncState.updateMany({
+    return withRetry(async () => {
+      const stuckSyncs = await prisma.syncState.findMany({
         where: {
-          id: { in: stuckSyncs.map((s) => s.id) },
-        },
-        data: {
-          syncInProgress: false,
-          isInitialSyncing: false,
+          syncInProgress: true,
+          updatedAt: { lt: cutoffTime },
         },
       });
 
-      console.log(`✅ Reset ${stuckSyncs.length} stuck syncs`);
-    }
+      if (stuckSyncs.length > 0) {
+        console.log(`Found ${stuckSyncs.length} stuck syncs, resetting...`);
 
-    return { resetCount: stuckSyncs.length };
+        await prisma.syncState.updateMany({
+          where: {
+            id: { in: stuckSyncs.map((s) => s.id) },
+          },
+          data: {
+            syncInProgress: false,
+            isInitialSyncing: false,
+          },
+        });
+
+        console.log(`✅ Reset ${stuckSyncs.length} stuck syncs`);
+      }
+
+      return { resetCount: stuckSyncs.length };
+    }, RETRY_CONFIGS.database);
   }
 
   static async cleanupOldJobs() {
-    await emailSyncQueue.clean(0, "completed");
-    await emailSyncQueue.clean(0, "failed");
-    console.log("✅ Cleaned up old sync jobs");
+    await withRetry(async () => {
+      await emailSyncQueue.clean(0, "completed");
+      await emailSyncQueue.clean(0, "failed");
+      console.log("✅ Cleaned up old sync jobs");
+    }, RETRY_CONFIGS.queue);
   }
 
   static async getSyncStats(userId: string) {
-    const syncState = await prisma.syncState.findUnique({
-      where: { userId },
-    });
+    return withRetry(async () => {
+      const [syncState, totalEmails, recentEmails] = await Promise.all([
+        prisma.syncState.findUnique({ where: { userId } }),
+        prisma.email.count({ where: { userId } }),
+        prisma.email.count({
+          where: {
+            userId,
+            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        }),
+      ]);
 
-    const totalEmails = await prisma.email.count({
-      where: { userId },
-    });
-
-    const recentEmails = await prisma.email.count({
-      where: {
-        userId,
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-        },
-      },
-    });
-
-    return {
-      syncInProgress: syncState?.syncInProgress || false,
-      isInitialSyncing: syncState?.isInitialSyncing || false,
-      lastSyncAt: syncState?.lastSyncAt,
-      totalEmails,
-      recentEmails,
-    };
+      return {
+        syncInProgress: syncState?.syncInProgress || false,
+        isInitialSyncing: syncState?.isInitialSyncing || false,
+        lastSyncAt: syncState?.lastSyncAt,
+        totalEmails,
+        recentEmails,
+      };
+    }, RETRY_CONFIGS.database);
   }
 
   private static async handleSyncTimeout(
@@ -168,31 +178,39 @@ export class EmailSyncService {
   }
 
   private static async getSyncState(userId: string) {
-    return prisma.syncState.upsert({
-      where: { userId },
-      update: {},
-      create: {
-        userId,
-        isInitialSyncing: true,
-        syncInProgress: false,
-      },
-    });
+    return withRetry(
+      () =>
+        prisma.syncState.upsert({
+          where: { userId },
+          update: {},
+          create: {
+            userId,
+            isInitialSyncing: true,
+            syncInProgress: false,
+          },
+        }),
+      RETRY_CONFIGS.database
+    );
   }
 
   private static async updateSyncState(userId: string, data: any) {
-    return prisma.syncState.upsert({
-      where: { userId },
-      update: {
-        ...data,
-        updatedAt: new Date(),
-      },
-      create: {
-        userId,
-        isInitialSyncing: true,
-        syncInProgress: false,
-        ...data,
-        updatedAt: new Date(),
-      },
-    });
+    return withRetry(
+      () =>
+        prisma.syncState.upsert({
+          where: { userId },
+          update: {
+            ...data,
+            updatedAt: new Date(),
+          },
+          create: {
+            userId,
+            isInitialSyncing: true,
+            syncInProgress: false,
+            ...data,
+            updatedAt: new Date(),
+          },
+        }),
+      RETRY_CONFIGS.database
+    );
   }
 }
