@@ -1,4 +1,5 @@
 import { prisma } from "@/config/database";
+import { cacheService } from "./cache.service";
 
 interface EmailFilters {
   isRead?: boolean;
@@ -28,8 +29,18 @@ export class EmailQueryService {
     search?: string,
     filters?: EmailFilters
   ): Promise<PaginatedEmailsResult> {
-    const skip = (page - 1) * limit;
+    const cacheKey = cacheService.emailsKey(
+      userId,
+      page,
+      limit,
+      search,
+      filters
+    );
+    const cached = cacheService.get<PaginatedEmailsResult>(cacheKey);
 
+    if (cached) return cached;
+
+    const skip = (page - 1) * limit;
     const where: any = { userId };
 
     if (search) {
@@ -106,13 +117,27 @@ export class EmailQueryService {
       result.nextPageEmails = nextPageEmails;
     }
 
+    // Cache for 2 minutes
+    cacheService.set(cacheKey, result, 2 * 60 * 1000);
+
     return result;
   }
 
   static async getEmailById(userId: string, id: string) {
-    return prisma.email.findFirst({
+    const cacheKey = cacheService.emailKey(userId, id);
+    const cached = cacheService.get(cacheKey);
+
+    if (cached) return cached;
+
+    const email = await prisma.email.findFirst({
       where: { userId, id },
     });
+
+    if (email) {
+      cacheService.set(cacheKey, email, 10 * 60 * 1000); // 10 minutes
+    }
+
+    return email;
   }
 
   static async markAsRead(userId: string, id: string) {
@@ -122,6 +147,13 @@ export class EmailQueryService {
     });
 
     if (result.count > 0) {
+      // Invalidate caches
+      cacheService.delete(cacheService.emailKey(userId, id));
+      cacheService.delete(cacheService.statsKey(userId));
+
+      // Invalidate email list caches for this user
+      cacheService.invalidateUserCache(userId);
+
       try {
         const { getWebSocketService } = await import("./websocket.service");
         const wsService = getWebSocketService();
@@ -137,6 +169,11 @@ export class EmailQueryService {
   }
 
   static async getUserEmailStats(userId: string) {
+    const cacheKey = cacheService.statsKey(userId);
+    const cached = cacheService.get(cacheKey);
+
+    if (cached) return cached;
+
     const [total, unread, withAttachments, categorized, syncState] =
       await Promise.all([
         prisma.email.count({ where: { userId } }),
@@ -146,46 +183,67 @@ export class EmailQueryService {
         prisma.syncState.findUnique({ where: { userId } }),
       ]);
 
-    const lastSyncAt = syncState?.lastSyncAt;
-    const syncInProgress = syncState?.syncInProgress || false;
-
-    return {
+    const stats = {
       total,
       unread,
       withAttachments,
       categorized,
       uncategorized: total - categorized,
-      lastSyncAt,
-      syncInProgress,
+      lastSyncAt: syncState?.lastSyncAt,
+      syncInProgress: syncState?.syncInProgress || false,
     };
+
+    // Cache stats for 1 minute
+    cacheService.set(cacheKey, stats, 60 * 1000);
+
+    return stats;
   }
 
   static async getSyncStatus(userId: string) {
+    const cacheKey = cacheService.syncStatusKey(userId);
+    const cached = cacheService.get(cacheKey);
+
+    if (cached) return cached;
+
     const syncState = await prisma.syncState.findUnique({
       where: { userId },
     });
 
     if (!syncState) {
-      return {
+      const status = {
         syncInProgress: false,
         isInitialSyncing: true,
         lastSyncAt: null,
         emailCount: 0,
       };
+
+      cacheService.set(cacheKey, status, 30 * 1000); // 30 seconds
+      return status;
     }
 
     const emailCount = await prisma.email.count({ where: { userId } });
 
-    return {
+    const status = {
       syncInProgress: syncState.syncInProgress,
       isInitialSyncing: syncState.isInitialSyncing,
       lastSyncAt: syncState.lastSyncAt,
       emailCount,
     };
+
+    // Cache for 30 seconds during sync, 5 minutes otherwise
+    const ttl = syncState.syncInProgress ? 30 * 1000 : 5 * 60 * 1000;
+    cacheService.set(cacheKey, status, ttl);
+
+    return status;
   }
 
   static async getRecentEmails(userId: string, limit: number = 20) {
-    return prisma.email.findMany({
+    const cacheKey = cacheService.recentEmailsKey(userId, limit);
+    const cached = cacheService.get(cacheKey);
+
+    if (cached) return cached;
+
+    const emails = await prisma.email.findMany({
       where: { userId },
       orderBy: { date: "desc" },
       take: limit,
@@ -201,5 +259,10 @@ export class EmailQueryService {
         avatarUrl: true,
       },
     });
+
+    // Cache for 2 minutes
+    cacheService.set(cacheKey, emails, 2 * 60 * 1000);
+
+    return emails;
   }
 }
