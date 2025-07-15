@@ -3,7 +3,6 @@ import { healthMonitor } from "@/services/health-monitor.service";
 
 const router = Router();
 
-// Basic health check
 router.get("/", async (req: Request, res: Response) => {
   try {
     const health = await healthMonitor.getSystemHealth();
@@ -24,7 +23,6 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Detailed health check
 router.get("/detailed", async (req: Request, res: Response) => {
   try {
     const health = await healthMonitor.getSystemHealth();
@@ -48,7 +46,6 @@ router.get("/detailed", async (req: Request, res: Response) => {
   }
 });
 
-// Individual service health
 router.get("/service/:name", async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
@@ -70,7 +67,6 @@ router.get("/service/:name", async (req: Request, res: Response) => {
   }
 });
 
-// Get specific metrics
 router.get("/metrics/:name?", (req: Request, res: Response) => {
   try {
     const { name } = req.params;
@@ -88,7 +84,6 @@ router.get("/metrics/:name?", (req: Request, res: Response) => {
   }
 });
 
-// Performance test endpoint
 router.post("/performance/:operation", async (req: Request, res: Response) => {
   try {
     const { operation } = req.params;
@@ -112,7 +107,6 @@ router.post("/performance/:operation", async (req: Request, res: Response) => {
   }
 });
 
-// Ready check (for load balancers)
 router.get("/ready", async (req: Request, res: Response) => {
   try {
     const health = await healthMonitor.getSystemHealth();
@@ -130,7 +124,6 @@ router.get("/ready", async (req: Request, res: Response) => {
   }
 });
 
-// Live check (for Kubernetes)
 router.get("/live", (req: Request, res: Response) => {
   res.json({
     live: true,

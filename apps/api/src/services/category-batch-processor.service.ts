@@ -51,7 +51,6 @@ export class CategoryBatchProcessor {
     const results: ProcessingResult[] = [];
 
     try {
-      // Group by user for better batching
       const userBatches = this.groupByUser(batch);
 
       for (const [userId, emails] of Object.entries(userBatches)) {
@@ -63,7 +62,6 @@ export class CategoryBatchProcessor {
     } catch (error) {
       console.error(`Batch processing failed for ${priority} priority:`, error);
 
-      // Re-queue failed items with retry logic
       for (const email of batch) {
         if (email.retryCount < this.MAX_RETRIES) {
           email.retryCount++;
@@ -96,7 +94,6 @@ export class CategoryBatchProcessor {
     } catch (error) {
       console.error("User batch processing failed:", error);
 
-      // Fallback to individual processing
       const results: ProcessingResult[] = [];
       for (const email of emails) {
         try {
@@ -155,7 +152,6 @@ export class CategoryBatchProcessor {
     this.queues.low = [];
   }
 
-  // Get emails by priority for monitoring
   getQueuedEmails(priority: "high" | "normal" | "low"): QueuedEmail[] {
     return [...this.queues[priority]];
   }

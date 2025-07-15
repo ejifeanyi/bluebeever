@@ -5,7 +5,7 @@ interface CacheItem<T> {
 
 class CacheService {
   private cache = new Map<string, CacheItem<any>>();
-  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly DEFAULT_TTL = 5 * 60 * 1000;
 
   set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
     this.cache.set(key, {
@@ -35,7 +35,6 @@ class CacheService {
     this.cache.clear();
   }
 
-  // Cache key generators
   emailsKey(
     userId: string,
     page: number,
@@ -63,7 +62,6 @@ class CacheService {
     return `recent:${userId}:${limit}`;
   }
 
-  // Invalidate related caches
   invalidateUserCache(userId: string): void {
     for (const key of this.cache.keys()) {
       if (key.includes(userId)) {
@@ -72,7 +70,6 @@ class CacheService {
     }
   }
 
-  // Cleanup expired items periodically
   private cleanup(): void {
     const now = Date.now();
     for (const [key, item] of this.cache.entries()) {
@@ -82,7 +79,6 @@ class CacheService {
     }
   }
 
-  // Start cleanup interval
   startCleanup(interval: number = 60000): void {
     setInterval(() => this.cleanup(), interval);
   }
@@ -90,5 +86,4 @@ class CacheService {
 
 export const cacheService = new CacheService();
 
-// Start cleanup on module load
 cacheService.startCleanup();

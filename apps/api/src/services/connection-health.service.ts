@@ -27,7 +27,6 @@ export class ConnectionHealthService {
     const startTime = Date.now();
 
     try {
-      // Simple health check query
       await prisma.$queryRaw`SELECT 1`;
 
       const responseTime = Date.now() - startTime;

@@ -1,9 +1,7 @@
 export const BATCH_CONFIG = {
-  // Gmail API limits
-  FETCH_CHUNK_SIZE: 20, // Fetch 20 emails at once
-  DB_BATCH_SIZE: 50, // Insert 50 emails per DB batch
+  FETCH_CHUNK_SIZE: 20, 
+  DB_BATCH_SIZE: 50,
 
-  // Sync strategy configs
   SYNC_CONFIGS: {
     quick: {
       maxResults: 100,
@@ -25,18 +23,15 @@ export const BATCH_CONFIG = {
     },
   },
 
-  // Performance tuning
-  CONCURRENT_WORKERS: 3, // Number of parallel sync workers
+  CONCURRENT_WORKERS: 3, 
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 2000,
 
-  // Rate limiting
-  GMAIL_API_DELAY: 100, // 100ms between Gmail API calls
-  BATCH_PROCESSING_DELAY: 500, // 500ms between batch processing
+  GMAIL_API_DELAY: 100,
+  BATCH_PROCESSING_DELAY: 500,
 
-  // Timeouts
-  SYNC_TIMEOUT_MS: 30 * 60 * 1000, // 30 minutes
-  JOB_TIMEOUT_MS: 10 * 60 * 1000, // 10 minutes
+  SYNC_TIMEOUT_MS: 30 * 60 * 1000,
+  JOB_TIMEOUT_MS: 10 * 60 * 1000, 
 } as const;
 
 export type SyncStrategy = keyof typeof BATCH_CONFIG.SYNC_CONFIGS;

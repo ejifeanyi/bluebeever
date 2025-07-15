@@ -4,7 +4,6 @@ import { authenticate } from '@/middleware/auth';
 
 const router = Router();
 
-// Add logging middleware for all auth routes
 router.use((req, res, next) => {
   console.log(`🌐 Auth route hit: ${req.method} ${req.originalUrl}`);
   console.log(`📋 Query params:`, req.query);

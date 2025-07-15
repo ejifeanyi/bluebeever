@@ -117,7 +117,6 @@ export class EmailQueryService {
       result.nextPageEmails = nextPageEmails;
     }
 
-    // Cache for 2 minutes
     cacheService.set(cacheKey, result, 2 * 60 * 1000);
 
     return result;
@@ -134,7 +133,7 @@ export class EmailQueryService {
     });
 
     if (email) {
-      cacheService.set(cacheKey, email, 10 * 60 * 1000); // 10 minutes
+      cacheService.set(cacheKey, email, 10 * 60 * 1000);
     }
 
     return email;
@@ -147,11 +146,9 @@ export class EmailQueryService {
     });
 
     if (result.count > 0) {
-      // Invalidate caches
       cacheService.delete(cacheService.emailKey(userId, id));
       cacheService.delete(cacheService.statsKey(userId));
 
-      // Invalidate email list caches for this user
       cacheService.invalidateUserCache(userId);
 
       try {
@@ -193,7 +190,6 @@ export class EmailQueryService {
       syncInProgress: syncState?.syncInProgress || false,
     };
 
-    // Cache stats for 1 minute
     cacheService.set(cacheKey, stats, 60 * 1000);
 
     return stats;
@@ -217,7 +213,7 @@ export class EmailQueryService {
         emailCount: 0,
       };
 
-      cacheService.set(cacheKey, status, 30 * 1000); // 30 seconds
+      cacheService.set(cacheKey, status, 30 * 1000); 
       return status;
     }
 
@@ -230,7 +226,6 @@ export class EmailQueryService {
       emailCount,
     };
 
-    // Cache for 30 seconds during sync, 5 minutes otherwise
     const ttl = syncState.syncInProgress ? 30 * 1000 : 5 * 60 * 1000;
     cacheService.set(cacheKey, status, ttl);
 
@@ -260,7 +255,6 @@ export class EmailQueryService {
       },
     });
 
-    // Cache for 2 minutes
     cacheService.set(cacheKey, emails, 2 * 60 * 1000);
 
     return emails;

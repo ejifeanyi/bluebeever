@@ -63,15 +63,12 @@ export class CategorizationWorker {
     const results: ProcessingResult[] = [];
 
     try {
-      // Process high priority first
       const highPriorityResults = await this.processor.processBatch("high");
       results.push(...highPriorityResults);
 
-      // Then normal priority
       const normalPriorityResults = await this.processor.processBatch("normal");
       results.push(...normalPriorityResults);
 
-      // Finally low priority
       const lowPriorityResults = await this.processor.processBatch("low");
       results.push(...lowPriorityResults);
 
@@ -105,5 +102,4 @@ export class CategorizationWorker {
   }
 }
 
-// Singleton instance
 export const categorizationWorker = new CategorizationWorker();

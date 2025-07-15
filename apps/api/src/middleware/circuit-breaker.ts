@@ -20,29 +20,25 @@ export class CircuitBreakerMiddleware {
   private circuits: Map<string, CircuitBreakerState> = new Map();
   private readonly defaultConfig: CircuitBreakerConfig = {
     failureThreshold: 5,
-    recoveryTimeout: 30000, // 30 seconds
-    monitorWindow: 60000, // 1 minute
+    recoveryTimeout: 30000,
+    monitorWindow: 60000,
     successThreshold: 3,
   };
 
-  // Main circuit breaker middleware
   create(serviceName: string, config?: Partial<CircuitBreakerConfig>) {
     const finalConfig = { ...this.defaultConfig, ...config };
 
     return async (req: Request, res: Response, next: NextFunction) => {
       const circuit = this.getCircuit(serviceName);
 
-      // Check circuit state
       if (circuit.state === "open") {
         if (Date.now() < circuit.nextAttempt) {
           return this.handleCircuitOpen(res, serviceName);
         }
-        // Try to recover
         circuit.state = "half-open";
         circuit.successCount = 0;
       }
 
-      // Wrap response to monitor success/failure
       const originalSend = res.send;
       const originalStatus = res.status;
       const self = this;
@@ -54,7 +50,6 @@ export class CircuitBreakerMiddleware {
       };
 
       res.send = function (body: any) {
-        // Record the result
         if (statusCode >= 500) {
           self.recordFailure(serviceName, finalConfig);
         } else {
@@ -68,7 +63,6 @@ export class CircuitBreakerMiddleware {
     };
   }
 
-  // Service-specific circuit breaker
   async executeWithCircuitBreaker<T>(
     serviceName: string,
     operation: () => Promise<T>,
@@ -77,7 +71,6 @@ export class CircuitBreakerMiddleware {
     const finalConfig = { ...this.defaultConfig, ...config };
     const circuit = this.getCircuit(serviceName);
 
-    // Check if circuit is open
     if (circuit.state === "open") {
       if (Date.now() < circuit.nextAttempt) {
         throw new Error(`Circuit breaker is OPEN for ${serviceName}`);
@@ -111,7 +104,6 @@ export class CircuitBreakerMiddleware {
     return this.getCircuit(serviceName);
   }
 
-  // Get all circuit states
   getAllCircuitStates(): Record<string, CircuitBreakerState> {
     const states: Record<string, CircuitBreakerState> = {};
     for (const [name, state] of this.circuits) {
@@ -120,7 +112,6 @@ export class CircuitBreakerMiddleware {
     return states;
   }
 
-  // Reset circuit breaker
   resetCircuit(serviceName: string): void {
     const circuit = this.getCircuit(serviceName);
     circuit.state = "closed";
@@ -130,7 +121,6 @@ export class CircuitBreakerMiddleware {
     circuit.nextAttempt = 0;
   }
 
-  // Health check integration
   async checkCircuitHealth(): Promise<{
     healthy: boolean;
     circuits: Record<string, any>;
@@ -180,7 +170,6 @@ export class CircuitBreakerMiddleware {
         circuit.successCount = 0;
       }
     } else if (circuit.state === "closed") {
-      // Reset failure count on success
       circuit.failures = Math.max(0, circuit.failures - 1);
     }
   }
@@ -195,7 +184,6 @@ export class CircuitBreakerMiddleware {
     circuit.failures++;
     circuit.lastFailureTime = now;
 
-    // Check if we should open the circuit
     if (circuit.failures >= config.failureThreshold) {
       circuit.state = "open";
       circuit.nextAttempt = now + config.recoveryTimeout;
@@ -212,21 +200,19 @@ export class CircuitBreakerMiddleware {
   }
 }
 
-// Singleton instance
 export const circuitBreaker = new CircuitBreakerMiddleware();
 
-// Common service circuit breakers
 export const aiServiceCircuitBreaker = circuitBreaker.create("ai-service", {
   failureThreshold: 3,
-  recoveryTimeout: 60000, // 1 minute
+  recoveryTimeout: 60000,
 });
 
 export const emailSyncCircuitBreaker = circuitBreaker.create("email-sync", {
   failureThreshold: 5,
-  recoveryTimeout: 30000, // 30 seconds
+  recoveryTimeout: 30000,
 });
 
 export const databaseCircuitBreaker = circuitBreaker.create("database", {
   failureThreshold: 10,
-  recoveryTimeout: 15000, // 15 seconds
+  recoveryTimeout: 15000,
 });

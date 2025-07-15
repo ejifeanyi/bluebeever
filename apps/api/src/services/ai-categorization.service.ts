@@ -29,7 +29,6 @@ interface BatchAiServiceResponse {
 }
 
 export class AiCategorizationService {
-  // Original single email categorization
   static async categorizeEmail(email: any): Promise<CategoryResult> {
     try {
       const response = await fetch(
@@ -75,7 +74,6 @@ export class AiCategorizationService {
     }
   }
 
-  // New batch categorization
   static async categorizeEmailBatch(
     emails: any[]
   ): Promise<BatchCategoryResult[]> {

@@ -25,7 +25,6 @@ export class BatchSyncWorker {
     }
 
     try {
-      // Refresh tokens and get user
       await AuthService.refreshUserTokens(userId);
       const user = await UserService.findById(userId);
 
@@ -41,7 +40,6 @@ export class BatchSyncWorker {
         `Processing ${strategy} sync for user ${userId} (batch size: ${config.batchSize})`
       );
 
-      // Fetch messages from Gmail
       const response = await gmail.users.messages.list({
         userId: "me",
         maxResults: config.batchSize,
@@ -59,7 +57,6 @@ export class BatchSyncWorker {
         return { processedCount: 0, hasMore: false, strategy };
       }
 
-      // Process batch
       const processor = new EmailBatchProcessor(
         gmail,
         userId,
@@ -67,7 +64,6 @@ export class BatchSyncWorker {
       );
       const processedCount = await processor.processBatch(messages);
 
-      // Handle pagination
       const hasMore = !!response.data.nextPageToken;
       const shouldContinue = this.shouldContinueSync(
         strategy,
@@ -82,7 +78,6 @@ export class BatchSyncWorker {
         syncInProgress: shouldContinue,
       });
 
-      // Queue next batch if needed
       if (shouldContinue && response.data.nextPageToken) {
         await this.queueNextBatch(
           userId,

@@ -47,7 +47,7 @@ export class QueueManager {
           name: queue.name,
           status: this.determineStatus(stats),
           stats,
-          workers: 0, // Bull doesn't expose concurrency directly
+          workers: 0,
         };
       })
     );
@@ -59,7 +59,7 @@ export class QueueManager {
     const job = await emailSyncQueue.add("sync-user-emails", {
       userId,
       provider,
-      lastSyncTime: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+      lastSyncTime: new Date(Date.now() - 24 * 60 * 60 * 1000), 
     });
 
     console.log(`Email sync triggered for user ${userId}`, { jobId: job.id });
@@ -154,7 +154,6 @@ export class QueueManager {
   async gracefulShutdown() {
     console.log("Starting graceful shutdown of queues...");
 
-    // Wait for active jobs to complete (max 30 seconds)
     const timeout = 30000;
     const startTime = Date.now();
 
@@ -173,7 +172,6 @@ export class QueueManager {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
-    // Close all queues
     await Promise.all(allQueues.map((queue) => queue.close()));
     console.log("All queues closed successfully");
   }

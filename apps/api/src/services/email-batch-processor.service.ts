@@ -247,21 +247,18 @@ export class EmailBatchProcessor {
     }
 
     if (payload.parts) {
-      // Try text/plain first
       for (const part of payload.parts) {
         if (part.mimeType === "text/plain" && part.body?.data) {
           return Buffer.from(part.body.data, "base64").toString("utf-8");
         }
       }
 
-      // Fallback to text/html
       for (const part of payload.parts) {
         if (part.mimeType === "text/html" && part.body?.data) {
           return Buffer.from(part.body.data, "base64").toString("utf-8");
         }
       }
 
-      // Recursive search
       for (const part of payload.parts) {
         const body = this.extractMessageBody(part);
         if (body) return body;

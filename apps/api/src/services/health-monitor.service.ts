@@ -30,7 +30,6 @@ export class HealthMonitorService {
   private startTime = Date.now();
   private readonly MAX_METRICS_HISTORY = 100;
 
-  // Core system metrics
   async getSystemHealth(): Promise<SystemHealth> {
     const services = Array.from(this.services.values());
     const metrics = this.getAllMetrics();
@@ -46,7 +45,6 @@ export class HealthMonitorService {
     };
   }
 
-  // Service health tracking
   async checkServiceHealth(serviceName: string): Promise<ServiceHealth> {
     const startTime = Date.now();
     let status: ServiceHealth["status"] = "up";
@@ -93,7 +91,6 @@ export class HealthMonitorService {
     return serviceHealth;
   }
 
-  // Metrics collection
   recordMetric(name: string, value: number, unit: string = ""): void {
     const status = this.getMetricStatus(name, value);
 
@@ -108,7 +105,6 @@ export class HealthMonitorService {
     const history = this.metrics.get(name) || [];
     history.push(metric);
 
-    // Keep only recent metrics
     if (history.length > this.MAX_METRICS_HISTORY) {
       history.shift();
     }
@@ -116,7 +112,6 @@ export class HealthMonitorService {
     this.metrics.set(name, history);
   }
 
-  // Get metrics for monitoring
   getMetrics(name?: string): HealthMetric[] {
     if (name) {
       return this.metrics.get(name) || [];
@@ -124,7 +119,6 @@ export class HealthMonitorService {
     return this.getAllMetrics();
   }
 
-  // Performance monitoring
   async measurePerformance<T>(
     operation: string,
     fn: () => Promise<T>
@@ -150,7 +144,6 @@ export class HealthMonitorService {
     }
   }
 
-  // Auto health checks
   startHealthChecks(intervalMs = 30000): void {
     const services = ["database", "ai-service", "email-sync", "redis"];
 
@@ -163,7 +156,6 @@ export class HealthMonitorService {
         }
       }
 
-      // Record system metrics
       this.recordSystemMetrics();
     }, intervalMs);
   }
@@ -178,7 +170,6 @@ export class HealthMonitorService {
   }
 
   private async checkDatabase(): Promise<Record<string, any>> {
-    // Mock database check - replace with actual DB connection test
     return {
       connections: 5,
       queryTime: Math.random() * 100,
@@ -187,7 +178,6 @@ export class HealthMonitorService {
   }
 
   private async checkAiService(): Promise<Record<string, any>> {
-    // Mock AI service check
     return {
       queueSize: Math.floor(Math.random() * 50),
       avgResponseTime: Math.random() * 2000,
@@ -196,7 +186,6 @@ export class HealthMonitorService {
   }
 
   private async checkEmailSync(): Promise<Record<string, any>> {
-    // Mock email sync check
     return {
       lastSync: new Date(),
       syncedCount: Math.floor(Math.random() * 100),
@@ -205,7 +194,6 @@ export class HealthMonitorService {
   }
 
   private async checkRedis(): Promise<Record<string, any>> {
-    // Mock Redis check
     return {
       connected: true,
       keyCount: Math.floor(Math.random() * 1000),
@@ -228,7 +216,6 @@ export class HealthMonitorService {
   }
 
   private getMetricStatus(name: string, value: number): HealthMetric["status"] {
-    // Define thresholds for different metrics
     const thresholds: Record<string, { warning: number; critical: number }> = {
       memory_heap_used: { warning: 500_000_000, critical: 1_000_000_000 },
       response_time: { warning: 1000, critical: 5000 },
@@ -263,5 +250,4 @@ export class HealthMonitorService {
   }
 }
 
-// Singleton instance
 export const healthMonitor = new HealthMonitorService();

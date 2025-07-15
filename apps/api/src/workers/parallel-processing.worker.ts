@@ -49,14 +49,12 @@ class ParallelProcessingWorker {
         const { userId, provider, lastSyncTime } = job.data;
 
         try {
-          // Sync emails from provider
           const newEmails = await this.syncFromProvider(
             userId,
             provider,
             lastSyncTime
           );
 
-          // Queue each email for processing
           const [, emailProcessingQueue] = allQueues;
           await Promise.all(
             newEmails.map((email: any) =>
@@ -85,10 +83,8 @@ class ParallelProcessingWorker {
         const { emailId, userId, rawEmail } = job.data;
 
         try {
-          // Process email (parse, clean, extract metadata)
           const processedData = await this.processEmail(rawEmail);
 
-          // Queue for storage and categorization in parallel
           const [, , emailStorageQueue, categorizationQueue] = allQueues;
 
           await Promise.all([

@@ -5,7 +5,6 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Build connection string with pool parameters
 const buildConnectionUrl = (baseUrl: string) => {
   const url = new URL(baseUrl);
   url.searchParams.set("connection_limit", env.DB_CONNECTION_LIMIT.toString());
@@ -36,7 +35,6 @@ export const prisma =
         : ["error"],
   });
 
-// Connection pool configuration for runtime monitoring
 export const dbConfig = {
   connectionLimit: env.DB_CONNECTION_LIMIT,
   connectTimeout: env.DB_CONNECT_TIMEOUT,
@@ -45,7 +43,6 @@ export const dbConfig = {
   maxIdleLifetime: env.DB_MAX_IDLE_LIFETIME,
 };
 
-// Graceful shutdown
 export const disconnectDb = async () => {
   await prisma.$disconnect();
 };

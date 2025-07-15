@@ -17,13 +17,11 @@ export class EmailProcessingService {
         throw new Error(`Email ${emailId} not found`);
       }
 
-      // Handle thread vs standalone logic
       if (email.threadId) {
         const result = await this.processThreadEmail(email);
         if (result) return result;
       }
 
-      // Fallback to standalone processing
       const categoryResult = await withRetry(
         () => AiCategorizationService.categorizeEmail(email),
         RETRY_CONFIGS.api
@@ -79,7 +77,6 @@ export class EmailProcessingService {
       RETRY_CONFIGS.api
     );
 
-    // Update all emails in thread
     await Promise.all(
       threadEmails.map((e) =>
         this.updateEmailWithCategory(e.id, categoryResult)

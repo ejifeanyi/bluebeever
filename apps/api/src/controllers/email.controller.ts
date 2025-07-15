@@ -193,7 +193,6 @@ export class EmailController {
         filters
       );
 
-      // **PREDICTIVE LOADING**: Include next page data in response
       const response = {
         ...result,
         meta: {
@@ -398,7 +397,6 @@ export class EmailController {
           .json(createErrorResponse(ERROR_CODES.NOT_FOUND, "Email not found"));
       }
 
-      // REAL-TIME UPDATES: Notify connected clients
       try {
         const wsService = getWebSocketService();
         if (wsService.isUserConnected(req.user.userId)) {

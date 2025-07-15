@@ -22,10 +22,8 @@ export class ConnectionMonitorMiddleware {
     };
   }
 
-  // Main middleware for monitoring database connections
   monitor() {
     return async (req: Request, res: Response, next: NextFunction) => {
-      // Handle health check endpoint
       if (
         this.options.enableHealthEndpoint &&
         req.path === this.options.healthCheckPath
@@ -33,11 +31,9 @@ export class ConnectionMonitorMiddleware {
         return this.handleHealthCheck(req, res);
       }
 
-      // Monitor connection before processing request
       const startTime = Date.now();
       const health = this.healthService.getCachedHealth();
 
-      // Check if database is healthy
       if (health && !health.isHealthy) {
         return res.status(503).json({
           error: "Database unavailable",
@@ -45,7 +41,6 @@ export class ConnectionMonitorMiddleware {
         });
       }
 
-      // Check connection pool usage
       if (health && health.activeConnections > health.maxConnections * 0.9) {
         if (this.options.enableWarnings) {
           console.warn(
@@ -59,10 +54,8 @@ export class ConnectionMonitorMiddleware {
         });
       }
 
-      // Add connection info to request
       req.dbHealth = health;
 
-      // Monitor request processing time
       res.on("finish", () => {
         const duration = Date.now() - startTime;
         if (
@@ -105,7 +98,6 @@ export class ConnectionMonitorMiddleware {
     }
   }
 
-  // Circuit breaker pattern for database operations
   async withCircuitBreaker<T>(
     operation: () => Promise<T>,
     fallback?: () => Promise<T>
@@ -122,26 +114,22 @@ export class ConnectionMonitorMiddleware {
     try {
       return await operation();
     } catch (error) {
-      // Re-check health after failure
       await this.healthService.checkHealth();
       throw error;
     }
   }
 }
 
-// Express middleware factory
 export const createConnectionMonitor = (options?: ConnectionMonitorOptions) => {
   const monitor = new ConnectionMonitorMiddleware(options);
   return monitor.monitor();
 };
 
-// Helper to start monitoring
 export const startConnectionMonitoring = (intervalMs: number = 30000) => {
   const healthService = ConnectionHealthService.getInstance();
   healthService.startHealthMonitoring(intervalMs);
 };
 
-// Types for enhanced request object
 declare global {
   namespace Express {
     interface Request {

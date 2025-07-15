@@ -13,8 +13,7 @@ if (process.env.LOAD_WORKERS === "true") {
 export const createApp = () => {
   const app = express();
 
-  // Start database connection monitoring
-  startConnectionMonitoring(30000); // Check every 30 seconds
+  startConnectionMonitoring(30000); 
 
   app.use(
     cors({
@@ -26,7 +25,6 @@ export const createApp = () => {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-  // Add connection monitoring middleware
   app.use(
     createConnectionMonitor({
       healthCheckPath: "/api/health/db",
