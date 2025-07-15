@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import logging
@@ -10,11 +10,12 @@ from .schemas import (
     StandaloneEmailRequest, ThreadedEmailRequest, CategorizationResponse,
     CategoryResponse
 )
-from .service import categorization_service
+from .service import categorization_service, EmailCategorizationService
 from .crud import get_categories, get_categories_count
 from .config import settings
 from .queue_manager import queue_manager, initialize_queue
 from contextlib import asynccontextmanager
+import hashlib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -147,8 +148,17 @@ async def categorize_standalone_email(
     - use_async=False: Processes synchronously
     """
     try:
+        email_id = request.email_id
+        content_hash = hashlib.sha256((request.subject or "" + request.body or "").encode()).hexdigest()
+        cached = queue_manager.get_cached_result(email_id)
+        if cached:
+            logger.info(f"Cache hit for email_id {email_id}")
+            return CategorizationResponse(**cached)
+        cached_hash = queue_manager.get_cached_result(content_hash)
+        if cached_hash:
+            logger.info(f"Cache hit for content hash {content_hash}")
+            return CategorizationResponse(**cached_hash)
         if use_async:
-            # Queue for async processing
             task_id = queue_manager.queue_task(request.dict(), "standalone")
             
             return CategorizationResponse(
@@ -161,8 +171,10 @@ async def categorize_standalone_email(
                 category_description=f"Queued for processing. Task ID: {task_id}"
             )
         else:
-            # Process synchronously
-            return categorization_service.categorize_standalone_email(db, request)
+            response = categorization_service.categorize_standalone_email(db, request)
+            queue_manager.cache_result(email_id, response.dict())
+            queue_manager.cache_result(content_hash, response.dict())
+            return response
             
     except Exception as e:
         logger.error(f"Error processing standalone email: {e}")
@@ -196,24 +208,39 @@ async def categorize_threaded_email(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/categorize/bulk", response_model=BulkProcessResponse)
-async def categorize_bulk_emails(request: BulkEmailRequest):
-    """Process multiple emails in bulk (always async)"""
+async def categorize_bulk_emails(request: BulkEmailRequest, db: Session = Depends(get_db)):
     try:
+        import time
+        start_time = time.time()
         task_ids = []
-        
-        for email in request.emails:
-            # Set user_id if not provided
-            if not email.user_id:
-                email.user_id = request.user_id
-                
-            task_id = queue_manager.queue_task(email.dict(), "standalone")
-            task_ids.append(task_id)
-        
-        return BulkProcessResponse(
-            task_ids=task_ids,
-            queued_count=len(task_ids)
-        )
-        
+        results = []
+        uncached_requests = []
+        uncached_indices = []
+        # Check cache for each email
+        for idx, email in enumerate(request.emails):
+            email_id = email.email_id
+            content_hash = hashlib.sha256((email.subject or "" + email.body or "").encode()).hexdigest()
+            cached = queue_manager.get_cached_result(email_id) or queue_manager.get_cached_result(content_hash)
+            if cached:
+                logger.info(f"Bulk cache hit for email {email_id}")
+                results.append(cached)
+            else:
+                uncached_requests.append(email)
+                uncached_indices.append(idx)
+                results.append(None)  # Placeholder
+        # Process uncached emails synchronously (for demo; in prod, use async queue)
+        for i, email in enumerate(uncached_requests):
+            response = categorization_service.categorize_standalone_email(db, email)
+            queue_manager.cache_result(email.email_id, response.dict())
+            content_hash = hashlib.sha256((email.subject or "" + email.body or "").encode()).hexdigest()
+            queue_manager.cache_result(content_hash, response.dict())
+            results[uncached_indices[i]] = response.dict()
+        # Record batch metrics
+        queue_manager.record_batch(len(request.emails))
+        elapsed = time.time() - start_time
+        logger.info(f"Processed bulk batch of {len(request.emails)} emails in {elapsed:.2f}s")
+        # Return results in input order
+        return {"task_ids": [], "queued_count": len(request.emails), "results": results}
     except Exception as e:
         logger.error(f"Error processing bulk emails: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -357,3 +384,31 @@ async def get_system_info():
         },
         "queue_stats": queue_manager.get_queue_stats()
     }
+
+@app.get("/metrics")
+async def metrics():
+    """Expose cache and batch metrics for monitoring"""
+    return queue_manager.get_metrics()
+
+@app.get("/admin/canonicals")
+async def list_canonicals():
+    """List all canonical categories and their keywords"""
+    return EmailCategorizationService.list_canonicals()
+
+@app.post("/admin/canonicals")
+async def add_canonical(name: str = Body(...), keywords: list = Body(...)):
+    """Add a new canonical category with keywords"""
+    EmailCategorizationService.add_canonical(name, keywords)
+    return {"message": f"Canonical '{name}' added.", "canonicals": EmailCategorizationService.list_canonicals()}
+
+@app.delete("/admin/canonicals/{name}")
+async def remove_canonical(name: str):
+    """Remove a canonical category"""
+    EmailCategorizationService.remove_canonical(name)
+    return {"message": f"Canonical '{name}' removed.", "canonicals": EmailCategorizationService.list_canonicals()}
+
+@app.put("/admin/canonicals/{name}/keywords")
+async def update_keywords(name: str, keywords: list = Body(...)):
+    """Update keywords for a canonical category"""
+    EmailCategorizationService.update_keywords(name, keywords)
+    return {"message": f"Keywords for '{name}' updated.", "canonicals": EmailCategorizationService.list_canonicals()}

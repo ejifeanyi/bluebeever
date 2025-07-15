@@ -2,21 +2,35 @@ import { emailProcessingQueue } from '@/config/queue';
 import { EmailProcessingService } from '@/services/email-processing.service';
 import { EmailProcessingJob } from '@crate/shared';
 
-emailProcessingQueue.process('process-email', 10, async (job) => {
-  const jobData = job.data as EmailProcessingJob;
-  
-  job.progress(0);
-  
-  try {
-    const result = await EmailProcessingService.processEmail(jobData);
-    
-    job.progress(100);
-    
-    return result;
-  } catch (error) {
-    console.error('Email processing job failed:', error);
-    throw error;
+const BATCH_SIZE = 10;
+const BATCH_INTERVAL = 100; // ms
+let batch: EmailProcessingJob[] = [];
+let batchTimeout: NodeJS.Timeout | null = null;
+
+async function flushBatch() {
+  if (batch.length === 0) return;
+  const jobsToProcess = batch.splice(0, BATCH_SIZE);
+  if (jobsToProcess.length === 1) {
+    // Fallback to single processing
+    await EmailProcessingService.processEmail(jobsToProcess[0]);
+  } else {
+    await EmailProcessingService.processEmailBatch(jobsToProcess);
   }
+}
+
+emailProcessingQueue.process('process-email', BATCH_SIZE, async (job) => {
+  const jobData = job.data as EmailProcessingJob;
+  batch.push(jobData);
+  if (batch.length >= BATCH_SIZE) {
+    if (batchTimeout) clearTimeout(batchTimeout);
+    await flushBatch();
+  } else if (!batchTimeout) {
+    batchTimeout = setTimeout(async () => {
+      await flushBatch();
+      batchTimeout = null;
+    }, BATCH_INTERVAL);
+  }
+  return { enqueued: true };
 });
 
 emailProcessingQueue.on('completed', (job, result) => {
@@ -28,5 +42,4 @@ emailProcessingQueue.on('failed', (job, err) => {
 });
 
 console.log('✅ Email processing worker is ready and listening for jobs');
-console.log('📊 Worker will process up to 5 concurrent jobs');
-console.log('🔄 Press Ctrl+C to stop the worker');
+console.log('📊 Worker will process up to 10 concurrent jobs in batch mode');

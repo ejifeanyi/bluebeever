@@ -1,5 +1,6 @@
 import { Job } from "bull";
 import { allQueues } from "../config/queue";
+import { EmailProcessingService } from "../services/email-processing.service";
 
 interface EmailSyncJobData {
   userId: string;
@@ -77,32 +78,36 @@ class ParallelProcessingWorker {
 
   private setupProcessingWorker() {
     const [, emailProcessingQueue] = allQueues;
-    emailProcessingQueue.process(
-      this.concurrency.emailProcessing,
-      async (job: Job<EmailProcessingJobData>) => {
-        const { emailId, userId, rawEmail } = job.data;
+    const BATCH_SIZE = 10;
+    const BATCH_INTERVAL = 100; // ms
+    let batch: EmailProcessingJobData[] = [];
+    let batchTimeout: NodeJS.Timeout | null = null;
 
-        try {
-          const processedData = await this.processEmail(rawEmail);
-
-          const [, , emailStorageQueue, categorizationQueue] = allQueues;
-
-          await Promise.all([
-            emailStorageQueue.add("store-email", { emailId, processedData }),
-            categorizationQueue.add("categorize-email", {
-              emailId,
-              content: processedData.content,
-              subject: processedData.subject,
-            }),
-          ]);
-
-          return { processed: true };
-        } catch (error) {
-          console.error("Email processing failed:", error);
-          throw error;
-        }
+    async function flushBatch() {
+      if (batch.length === 0) return;
+      const jobsToProcess = batch.splice(0, BATCH_SIZE);
+      if (jobsToProcess.length === 1) {
+        // Fallback to single processing
+        await EmailProcessingService.processEmail(jobsToProcess[0]);
+      } else {
+        await EmailProcessingService.processEmailBatch(jobsToProcess);
       }
-    );
+    }
+
+    emailProcessingQueue.process('process-email', BATCH_SIZE, async (job) => {
+      const jobData = job.data as EmailProcessingJobData;
+      batch.push(jobData);
+      if (batch.length >= BATCH_SIZE) {
+        if (batchTimeout) clearTimeout(batchTimeout);
+        await flushBatch();
+      } else if (!batchTimeout) {
+        batchTimeout = setTimeout(async () => {
+          await flushBatch();
+          batchTimeout = null;
+        }, BATCH_INTERVAL);
+      }
+      return { enqueued: true };
+    });
   }
 
   private setupStorageWorker() {

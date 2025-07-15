@@ -1,3 +1,6 @@
+import Redis from "redis";
+import { env } from "@/config/env";
+
 interface CacheItem<T> {
   data: T;
   expiry: number;
@@ -6,29 +9,55 @@ interface CacheItem<T> {
 class CacheService {
   private cache = new Map<string, CacheItem<any>>();
   private readonly DEFAULT_TTL = 5 * 60 * 1000;
+  private redisClient: ReturnType<typeof Redis.createClient> | null = null;
+  private useRedis: boolean;
 
-  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
-    this.cache.set(key, {
-      data,
-      expiry: Date.now() + ttl,
-    });
-  }
-
-  get<T>(key: string): T | null {
-    const item = this.cache.get(key);
-
-    if (!item) return null;
-
-    if (Date.now() > item.expiry) {
-      this.cache.delete(key);
-      return null;
+  constructor() {
+    this.useRedis = !!env.REDIS_HOST && process.env.CACHE_BACKEND !== 'memory';
+    if (this.useRedis) {
+      this.redisClient = Redis.createClient({
+        socket: {
+          host: env.REDIS_HOST,
+          port: env.REDIS_PORT,
+        },
+        password: env.REDIS_PASSWORD,
+      });
+      this.redisClient.connect().catch(console.error);
     }
-
-    return item.data;
   }
 
-  delete(key: string): void {
-    this.cache.delete(key);
+  async set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): Promise<void> {
+    if (this.useRedis && this.redisClient) {
+      await this.redisClient.set(key, JSON.stringify(data), { PX: ttl });
+    } else {
+      this.cache.set(key, {
+        data,
+        expiry: Date.now() + ttl,
+      });
+    }
+  }
+
+  async get<T>(key: string): Promise<T | null> {
+    if (this.useRedis && this.redisClient) {
+      const val = await this.redisClient.get(key);
+      return val ? JSON.parse(val) : null;
+    } else {
+      const item = this.cache.get(key);
+      if (!item) return null;
+      if (Date.now() > item.expiry) {
+        this.cache.delete(key);
+        return null;
+      }
+      return item.data;
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    if (this.useRedis && this.redisClient) {
+      await this.redisClient.del(key);
+    } else {
+      this.cache.delete(key);
+    }
   }
 
   clear(): void {
@@ -68,6 +97,43 @@ class CacheService {
         this.cache.delete(key);
       }
     }
+  }
+
+  // Categorization result cache keys
+  categoryResultKey(emailId: string): string {
+    return `category:result:${emailId}`;
+  }
+  categoryContentHashKey(hash: string): string {
+    return `category:hash:${hash}`;
+  }
+
+  // Single categorization result
+  async getCategoryResult(emailId: string): Promise<any | null> {
+    return this.get(this.categoryResultKey(emailId));
+  }
+  async setCategoryResult(emailId: string, result: any, ttl?: number): Promise<void> {
+    return this.set(this.categoryResultKey(emailId), result, ttl);
+  }
+
+  // Batch categorization results
+  async getCategoryBatchResults(emailIds: string[]): Promise<Record<string, any>> {
+    const results: Record<string, any> = {};
+    for (const id of emailIds) {
+      const res = await this.getCategoryResult(id);
+      if (res) results[id] = res;
+    }
+    return results;
+  }
+  async setCategoryBatchResults(results: Record<string, any>, ttl?: number): Promise<void> {
+    await Promise.all(Object.entries(results).map(([id, res]) => this.setCategoryResult(id, res, ttl)));
+  }
+
+  // Deduplication by content hash
+  async getDeduplicationKey(hash: string): Promise<any | null> {
+    return this.get(this.categoryContentHashKey(hash));
+  }
+  async setDeduplicationKey(hash: string, value: any, ttl?: number): Promise<void> {
+    return this.set(this.categoryContentHashKey(hash), value, ttl);
   }
 
   private cleanup(): void {

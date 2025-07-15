@@ -4,10 +4,11 @@ import logging
 import threading
 import time
 from typing import Dict, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from dataclasses import dataclass
 from enum import Enum
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,16 @@ class RabbitMQManager:
         self.is_running = False
         self.processor_callback = None
         self.queue_name = "email_processing"
+        self.result_queue = "category_results"
+        self.result_cache_ttl = getattr(settings, 'result_cache_ttl', 7200)
+        self.worker_prefetch_count = getattr(settings, 'worker_prefetch_count', 10)
+        # Metrics
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.batches_processed = 0
+        self.total_batch_size = 0
+        self._result_cache: Dict[str, Dict] = {}  # In-memory fallback for fast lookup
+        self._result_cache_expiry: Dict[str, float] = {}
         
     def connect(self):
         try:
@@ -142,7 +153,7 @@ class RabbitMQManager:
                         continue
                 
                 # Set up consumer
-                self.channel.basic_qos(prefetch_count=1)  # Process one at a time
+                self.channel.basic_qos(prefetch_count=self.worker_prefetch_count)  # Process one at a time
                 self.channel.basic_consume(
                     queue=self.queue_name,
                     on_message_callback=self._process_message
@@ -233,6 +244,91 @@ class RabbitMQManager:
             del self.task_results[task_id]
         
         return len(completed_tasks)
+
+    def cache_result(self, key: str, result: Dict):
+        """Cache a categorization result in RabbitMQ and in-memory fallback."""
+        message = {
+            "key": key,
+            "result": result,
+            "cached_at": datetime.now().isoformat(),
+            "ttl": self.result_cache_ttl
+        }
+        try:
+            if not self.channel:
+                self.connect()
+            # Publish to result queue
+            self.channel.queue_declare(queue=self.result_queue, durable=True, arguments={"x-message-ttl": self.result_cache_ttl * 1000})
+            self.channel.basic_publish(
+                exchange='',
+                routing_key=self.result_queue,
+                body=json.dumps(message),
+                properties=pika.BasicProperties(delivery_mode=2)
+            )
+            # In-memory fallback
+            self._result_cache[key] = result
+            self._result_cache_expiry[key] = time.time() + self.result_cache_ttl
+            logger.info(f"Cached result for key {key}")
+        except Exception as e:
+            logger.error(f"Failed to cache result: {e}")
+
+    def get_cached_result(self, key: str) -> Optional[Dict]:
+        """Retrieve a cached categorization result by key (email ID or content hash)."""
+        now = time.time()
+        if key in self._result_cache and self._result_cache_expiry.get(key, 0) > now:
+            self.cache_hits += 1
+            logger.info(f"Cache hit (memory) for key {key}")
+            return self._result_cache[key]
+        try:
+            if not self.channel:
+                self.connect()
+            self.channel.queue_declare(queue=self.result_queue, durable=True, arguments={"x-message-ttl": self.result_cache_ttl * 1000})
+            method_frame, header_frame, body = self.channel.basic_get(self.result_queue, auto_ack=False)
+            found = None
+            while method_frame:
+                msg = json.loads(body.decode())
+                msg_key = msg.get("key")
+                if msg_key == key:
+                    found = msg["result"]
+                    self._result_cache[key] = found
+                    self._result_cache_expiry[key] = now + self.result_cache_ttl
+                    self.channel.basic_ack(method_frame.delivery_tag)
+                    self.cache_hits += 1
+                    logger.info(f"Cache hit (RabbitMQ) for key {key}")
+                    break
+                else:
+                    self.channel.basic_nack(method_frame.delivery_tag, requeue=True)
+                method_frame, header_frame, body = self.channel.basic_get(self.result_queue, auto_ack=False)
+            if found:
+                return found
+            self.cache_misses += 1
+            logger.info(f"Cache miss for key {key}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get cached result: {e}")
+            self.cache_misses += 1
+            return None
+
+    def record_batch(self, batch_size: int):
+        self.batches_processed += 1
+        self.total_batch_size += batch_size
+        logger.info(f"Processed batch of size {batch_size}")
+
+    def get_metrics(self):
+        avg_batch_size = self.total_batch_size / self.batches_processed if self.batches_processed else 0
+        return {
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "batches_processed": self.batches_processed,
+            "avg_batch_size": avg_batch_size
+        }
+
+    def cleanup_result_cache(self):
+        """Clean up expired in-memory cache entries."""
+        now = time.time()
+        expired_keys = [k for k, exp in self._result_cache_expiry.items() if exp < now]
+        for k in expired_keys:
+            del self._result_cache[k]
+            del self._result_cache_expiry[k]
 
 # Global queue manager instance
 queue_manager = RabbitMQManager()

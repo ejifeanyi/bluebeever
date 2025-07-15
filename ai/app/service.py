@@ -4,10 +4,12 @@ import re
 import logging
 import numpy as np
 from datetime import datetime
-from typing import List
+from typing import List, Dict
 from sqlalchemy.orm import Session
 from sklearn.metrics.pairwise import cosine_similarity
 from cachetools import TTLCache
+from .queue_manager import queue_manager
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +21,27 @@ from .schemas import CategorizationResponse, StandaloneEmailRequest
 from .vector_store import VectorStore
 from .thread_utils import ThreadUtils
 
+CANONICAL_CATEGORIES = {
+    "work": ["work", "business", "meeting", "project", "team", "client", "office", "manager", "colleague", "deadline", "report"],
+    "finance": ["payment", "invoice", "bill", "bank", "money", "expense", "salary", "tax", "loan", "account", "transaction"],
+    "travel": ["flight", "hotel", "trip", "travel", "booking", "reservation", "ticket", "itinerary", "airport", "car rental"],
+    "personal": ["family", "friend", "personal", "vacation", "party", "wedding", "birthday", "anniversary", "baby", "home"],
+    "shopping": ["order", "purchase", "shipping", "delivery", "cart", "store", "item", "product", "sale", "discount", "receipt"],
+    "health": ["doctor", "appointment", "health", "medical", "clinic", "hospital", "pharmacy", "insurance", "test", "vaccine"],
+    "education": ["school", "university", "college", "course", "class", "exam", "assignment", "lecture", "student", "teacher"],
+    "entertainment": ["movie", "music", "concert", "show", "event", "game", "festival", "theater", "series", "tv"],
+    "tech": ["software", "hardware", "computer", "laptop", "phone", "app", "update", "bug", "feature", "release", "account"],
+    "food": ["restaurant", "food", "dinner", "lunch", "breakfast", "menu", "recipe", "cook", "cafe", "bar", "drink"],
+    "general": []
+}
+
 class EmailCategorizationService:
-    """Production-ready email categorization service"""
-    
+    canonical_categories: Dict[str, list] = CANONICAL_CATEGORIES.copy()
+    canonical_embeddings: Dict[str, list] = {}
+    embedding_threshold: float = 0.5
+
     def __init__(self, model_name: str = None):
         model_name = model_name or settings.sentence_transformer_model
-        
         try:
             self.model = SentenceTransformer(model_name)
             self.embedding_dim = self.model.get_sentence_embedding_dimension()
@@ -32,7 +49,17 @@ class EmailCategorizationService:
         except Exception as e:
             logger.error(f"Failed to load model {model_name}: {e}")
             raise
-    
+        # Precompute canonical embeddings
+        self._precompute_canonical_embeddings()
+
+    def _precompute_canonical_embeddings(self):
+        self.canonical_embeddings = {}
+        for cat in self.canonical_categories:
+            # Use the category name as the representative phrase
+            emb = self.model.encode(cat, convert_to_tensor=False).tolist()
+            self.canonical_embeddings[cat] = emb
+        logger.info(f"Precomputed embeddings for canonicals: {list(self.canonical_embeddings.keys())}")
+
     def clean_email_content(self, content: str) -> str:
         """Clean and preprocess email content"""
         if not content:
@@ -93,33 +120,68 @@ class EmailCategorizationService:
             return [0.0] * self.embedding_dim
     
     def generate_category_name(self, text: str) -> str:
-        """Generate meaningful category name"""
-        # Keyword-based category detection
+        """Generate a one-word, canonical category name with embedding fallback"""
         text_lower = text.lower()
-        
-        category_keywords = {
-            "Work & Business": ["meeting", "project", "work", "business", "team", "client"],
-            "Finance & Bills": ["payment", "invoice", "bill", "bank", "money", "expense"],
-            "Travel & Bookings": ["flight", "hotel", "trip", "travel", "booking"],
-            "Personal & Social": ["family", "friend", "personal", "vacation", "party"],
-            "Shopping & Orders": ["order", "purchase", "shipping", "delivery", "cart"],
-            "Health & Medical": ["doctor", "appointment", "health", "medical", "clinic"],
-        }
-        
-        for category, keywords in category_keywords.items():
+        for canonical, keywords in self.canonical_categories.items():
             if any(keyword in text_lower for keyword in keywords):
-                return category
-        
-        # Fallback to extracting meaningful words
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
-        if words:
-            return f"{words[0].title()} Related"
-        
-        return "General"
+                return canonical
+        # Embedding fallback
+        input_emb = self.model.encode(text, convert_to_tensor=False).tolist()
+        best_cat = "general"
+        best_sim = 0.0
+        for cat, emb in self.canonical_embeddings.items():
+            sim = self._calculate_similarity(input_emb, emb)
+            if sim > best_sim:
+                best_sim = sim
+                best_cat = cat
+        if best_sim >= self.embedding_threshold:
+            logger.info(f"Embedding fallback: assigned to '{best_cat}' (sim={best_sim:.2f})")
+            return best_cat
+        return "general"
+
+    # Admin tools for canonical set
+    @classmethod
+    def list_canonicals(cls):
+        return cls.canonical_categories.copy()
+
+    @classmethod
+    def add_canonical(cls, name: str, keywords: list):
+        cls.canonical_categories[name] = keywords
+        # Recompute embedding if instance exists
+        if hasattr(cls, 'canonical_embeddings'):
+            instance = cls()
+            instance._precompute_canonical_embeddings()
+
+    @classmethod
+    def remove_canonical(cls, name: str):
+        if name in cls.canonical_categories:
+            del cls.canonical_categories[name]
+            if hasattr(cls, 'canonical_embeddings'):
+                instance = cls()
+                instance._precompute_canonical_embeddings()
+
+    @classmethod
+    def update_keywords(cls, name: str, keywords: list):
+        cls.canonical_categories[name] = keywords
+        if hasattr(cls, 'canonical_embeddings'):
+            instance = cls()
+            instance._precompute_canonical_embeddings()
     
     def categorize_standalone_email(self, db: Session, request: StandaloneEmailRequest) -> CategorizationResponse:
-        """Fixed categorize standalone email - properly creates new categories"""
         try:
+            email_id = request.email_id
+            content_hash = hashlib.sha256((request.subject or "" + request.body or "").encode()).hexdigest()
+            # Check cache by email_id
+            cached = queue_manager.get_cached_result(email_id)
+            if cached:
+                logger.info(f"Cache hit for email_id {email_id}")
+                return CategorizationResponse(**cached)
+            # Check cache by content hash
+            cached_hash = queue_manager.get_cached_result(content_hash)
+            if cached_hash:
+                logger.info(f"Cache hit for content hash {content_hash}")
+                return CategorizationResponse(**cached_hash)
+            
             meaningful_text = self.extract_meaningful_text(request.subject, request.body)
             print(f"DEBUG: Meaningful text: '{meaningful_text}'")  # Debug logging
             
@@ -144,10 +206,14 @@ class EmailCategorizationService:
                 from .crud import update_category_email_count
                 update_category_email_count(db, category.id, 1)
                 
-                return self._create_response(
+                response = self._create_response(
                     request.email_id, request.user_id, category.name,
                     similarity, False, category.description
                 )
+                # Cache result by email_id and content hash
+                queue_manager.cache_result(email_id, response.dict())
+                queue_manager.cache_result(content_hash, response.dict())
+                return response
             else:
                 # THIS IS THE KEY FIX: Create new category when no matches found
                 print("DEBUG: No similar categories found, creating new category")
@@ -156,14 +222,18 @@ class EmailCategorizationService:
                 print(f"DEBUG: Generated category name: '{category_name}'")
                 
                 # IMPORTANT: Don't create "General" categories automatically
-                if category_name == "General":
+                if category_name == "general":
                     # Try to extract a better name from the content
                     category_name = self._extract_better_category_name(meaningful_text, request.subject)
                     print(f"DEBUG: Improved category name: '{category_name}'")
                 
-                return self._create_new_category_response(
+                response = self._create_new_category_response(
                     db, request, category_name, meaningful_text, email_embedding
                 )
+                # Cache result by email_id and content hash
+                queue_manager.cache_result(email_id, response.dict())
+                queue_manager.cache_result(content_hash, response.dict())
+                return response
             
         except Exception as e:
             logger.error(f"Error categorizing email {request.email_id}: {e}")
@@ -215,10 +285,14 @@ class EmailCategorizationService:
                                 # Boost confidence for thread consistency
                                 boosted_confidence = min(0.95, similarity + getattr(settings, 'confidence_boost_for_threads', 0.1))
                                 
-                                return self._create_response(
+                                response = self._create_response(
                                     request.email_id, request.user_id, previous_category.name,
                                     boosted_confidence, False, previous_category.description
                                 )
+                                # Cache result by email_id and content hash
+                                queue_manager.cache_result(request.email_id, response.dict())
+                                queue_manager.cache_result(hashlib.sha256((request.subject or "" + request.body or "").encode()).hexdigest(), response.dict())
+                                return response
                             else:
                                 print(f"DEBUG THREADED: Similarity too low, falling back to standalone categorization")
                         else:
@@ -278,16 +352,15 @@ class EmailCategorizationService:
             category_description=description
         )
     
-    def _create_new_category_response(self, db: Session, request: StandaloneEmailRequest, category_name: str, 
-                                    meaningful_text: str, embedding: List[float]) -> CategorizationResponse:
-        """Create new category and response"""
+    def _create_new_category_response(self, db: Session, request: StandaloneEmailRequest, category_name: str, meaningful_text: str, embedding: List[float]) -> CategorizationResponse:
         from .crud import get_category_by_name, create_category, update_category_email_count
-        
-        # Ensure unique name
-        existing = get_category_by_name(db, category_name)
+        # Always use canonical name
+        canonical_name = category_name.lower().strip()
+        existing = get_category_by_name(db, canonical_name)
         if existing:
-            category_name = f"{category_name} {datetime.now().strftime('%m%d')}"
-        
+            category_name = canonical_name
+        else:
+            category_name = canonical_name
         new_category = create_category(
             db=db,
             name=category_name,
@@ -295,9 +368,7 @@ class EmailCategorizationService:
             embedding=embedding,
             sample_content=request.snippet
         )
-        
         update_category_email_count(db, new_category.id, 1)
-        
         return self._create_response(
             request.email_id, request.user_id, new_category.name,
             0.8, True, new_category.description

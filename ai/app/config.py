@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     
     # Queue Configuration
     queue_name: str = os.getenv("QUEUE_NAME", "email_processing")
-    worker_prefetch_count: int = int(os.getenv("WORKER_PREFETCH_COUNT", "1"))
+    # RabbitMQ and result cache tuning
+    result_cache_ttl: int = int(os.getenv("RESULT_CACHE_TTL", "7200"))  # 2 hours
+    worker_prefetch_count: int = int(os.getenv("WORKER_PREFETCH_COUNT", "10"))  # Batch size for worker
     max_retries: int = int(os.getenv("MAX_RETRIES", "3"))
     
     # ML Model Configuration
@@ -39,15 +41,17 @@ class Settings(BaseSettings):
     
     # Performance Settings
     max_categories_to_check: int = int(os.getenv("MAX_CATEGORIES_CHECK", "1000"))
-    cache_size: int = int(os.getenv("CACHE_SIZE", "500"))  # Larger cache for production
-    embedding_cache_ttl: int = int(os.getenv("CACHE_TTL", "7200"))  # 2 hours for production
+    # Embedding cache tuning
+    cache_size: int = int(os.getenv("CACHE_SIZE", "2000"))  # Larger cache for production
+    embedding_cache_ttl: int = int(os.getenv("EMBEDDING_CACHE_TTL", "7200"))  # 2 hours
     
     # Text Processing Limits
     max_body_chars: int = int(os.getenv("MAX_BODY_CHARS", "500"))
     max_subject_chars: int = int(os.getenv("MAX_SUBJECT_CHARS", "200"))
     
     # Database Connection Settings
-    db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "10"))
+    # DB pool tuning
+    db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "30"))
     db_pool_overflow: int = int(os.getenv("DB_POOL_OVERFLOW", "20"))
     db_pool_timeout: int = int(os.getenv("DB_POOL_TIMEOUT", "30"))
     
