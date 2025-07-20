@@ -26,7 +26,6 @@ class ThreadedEmailRequest(BaseModel):
     timestamp: Optional[datetime] = Field(None, description="Email timestamp")
     labels: Optional[List[str]] = Field(default_factory=list, description="Existing email labels")
     
-    # Thread-specific fields
     thread_subject: Optional[str] = Field(None, description="Original thread subject")
     previous_category: Optional[str] = Field(None, description="Previous category in thread")
     thread_id: Optional[str] = Field(None, description="Thread identifier")

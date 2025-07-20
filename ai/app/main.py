@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional
+from pydantic import BaseModel, Field
 import os
 from .database import get_db, Base, engine, SessionLocal
 from .schemas import (
@@ -17,31 +18,24 @@ from .queue_manager import queue_manager, initialize_queue
 from contextlib import asynccontextmanager
 import hashlib
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create tables
 Base.metadata.create_all(bind=engine)
 
-# Initialize FastAPI
 app = FastAPI(
     title="Email Categorization API",
     description="AI-powered email categorization system with RabbitMQ",
     version="2.0.0"
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Pydantic Models
-from pydantic import BaseModel, Field
 
 class CategoriesListResponse(BaseModel):
     categories: List[CategoryResponse] = Field(..., description="List of categories")
@@ -74,7 +68,6 @@ class BulkProcessResponse(BaseModel):
     task_ids: List[str] = Field(..., description="List of task IDs")
     queued_count: int = Field(..., description="Number of emails queued")
 
-# Email processor function
 def process_email_task(task_data: Dict, task_type: str = "email") -> Dict:
     """Process email categorization task"""
     db = SessionLocal()
@@ -90,15 +83,13 @@ def process_email_task(task_data: Dict, task_type: str = "email") -> Dict:
     finally:
         db.close()
 
-# Startup event
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Startup ---
     try:
         from .database import test_database_connection, create_tables
         if not test_database_connection():
             logger.error("Database connection failed on startup")
-            yield  # Yield control even if startup fails
+            yield
             return
         
         if not create_tables():
@@ -115,10 +106,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to start service: {e}")
 
-    # Yield control to the application
     yield
 
-    # --- Shutdown ---
     try:
         queue_manager.stop_worker()
         queue_manager.disconnect()
@@ -126,7 +115,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 
-# Initialize FastAPI with lifespan
 app = FastAPI(
     title="Email Categorization API",
     description="AI-powered email categorization system with RabbitMQ",
@@ -134,7 +122,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# API Endpoints
 @app.post("/categorize/standalone", response_model=CategorizationResponse)
 async def categorize_standalone_email(
     request: StandaloneEmailRequest,
@@ -216,7 +203,6 @@ async def categorize_bulk_emails(request: BulkEmailRequest, db: Session = Depend
         results = []
         uncached_requests = []
         uncached_indices = []
-        # Check cache for each email
         for idx, email in enumerate(request.emails):
             email_id = email.email_id
             content_hash = hashlib.sha256((email.subject or "" + email.body or "").encode()).hexdigest()
@@ -228,18 +214,15 @@ async def categorize_bulk_emails(request: BulkEmailRequest, db: Session = Depend
                 uncached_requests.append(email)
                 uncached_indices.append(idx)
                 results.append(None)  # Placeholder
-        # Process uncached emails synchronously (for demo; in prod, use async queue)
         for i, email in enumerate(uncached_requests):
             response = categorization_service.categorize_standalone_email(db, email)
             queue_manager.cache_result(email.email_id, response.dict())
             content_hash = hashlib.sha256((email.subject or "" + email.body or "").encode()).hexdigest()
             queue_manager.cache_result(content_hash, response.dict())
             results[uncached_indices[i]] = response.dict()
-        # Record batch metrics
         queue_manager.record_batch(len(request.emails))
         elapsed = time.time() - start_time
         logger.info(f"Processed bulk batch of {len(request.emails)} emails in {elapsed:.2f}s")
-        # Return results in input order
         return {"task_ids": [], "queued_count": len(request.emails), "results": results}
     except Exception as e:
         logger.error(f"Error processing bulk emails: {e}")
@@ -284,19 +267,16 @@ async def list_categories(
 async def health_check(db: Session = Depends(get_db)):
     """Health check endpoint with better error handling"""
     try:
-        # Check database connection first
         from .crud import check_database_health
         if not check_database_health(db):
             raise HTTPException(status_code=503, detail="Database connection failed")
         
-        # Get categories count with error handling
         try:
             categories_count = get_categories_count(db)
         except Exception as e:
             logger.error(f"Error getting categories count: {e}")
             categories_count = -1  # Indicate error but don't fail entirely
         
-        # Get queue stats with error handling
         try:
             queue_stats = queue_manager.get_queue_stats()
         except Exception as e:
@@ -315,7 +295,6 @@ async def health_check(db: Session = Depends(get_db)):
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
 
-# Alternative simple health check that doesn't depend on database
 @app.get("/health/simple")
 async def simple_health_check():
     """Simple health check that doesn't require database"""

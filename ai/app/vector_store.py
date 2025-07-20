@@ -4,10 +4,9 @@ from typing import List, Tuple, TYPE_CHECKING
 from .config import settings
 from sqlalchemy.orm import Session
 from .database import check_vector_extension
-from .models import Category  # Import the Category model
+from .models import Category
 import logging
 
-# Use TYPE_CHECKING to avoid circular imports if needed
 if TYPE_CHECKING:
     pass
 
@@ -41,13 +40,10 @@ class VectorStore:
         limit: int
     ) -> List[Tuple[Category, float]]:
         """Use pgvector for similarity search (PostgreSQL only)"""
-        # This would use pgvector's <-> operator for cosine distance
-        # Simplified implementation - you'd need proper vector column type
+
         try:
             from sqlalchemy import text
-            
-            # For pgvector, you would typically have a vector column type
-            # This is a simplified example - actual implementation depends on your setup
+
             query = text("""
                 SELECT c.*, (c.embedding <-> :query_vector::vector) as distance 
                 FROM categories c
@@ -56,23 +52,20 @@ class VectorStore:
                 LIMIT :limit
             """)
             
-            # Convert list to pgvector format (this is pseudocode)
             vector_str = f"[{','.join(map(str, query_embedding))}]"
             
             result = self.db.execute(query, {
                 'query_vector': vector_str,
-                'threshold': 1 - threshold,  # Convert similarity to distance
+                'threshold': 1 - threshold, 
                 'limit': limit
             })
             
-            # Convert results back to Category objects with similarity scores
             categories_with_scores = []
             for row in result:
-                # You'd need to properly reconstruct the Category object from the row
-                # This depends on your exact database schema
+
                 category = self.db.query(Category).filter(Category.id == row.id).first()
                 if category:
-                    similarity = 1 - row.distance  # Convert distance back to similarity
+                    similarity = 1 - row.distance
                     categories_with_scores.append((category, similarity))
             
             return categories_with_scores
@@ -102,7 +95,6 @@ class VectorStore:
             try:
                 cat_vec = np.array(category.embedding_vector).reshape(1, -1)
                 
-                # Ensure vectors have the same dimensions
                 if query_vec.shape[1] != cat_vec.shape[1]:
                     logger.warning(f"Dimension mismatch for category {category.id}: "
                                  f"query={query_vec.shape[1]}, category={cat_vec.shape[1]}")
@@ -120,7 +112,6 @@ class VectorStore:
                 logger.error(f"Unexpected error calculating similarity for category {category.id}: {e}")
                 continue
         
-        # Sort by similarity descending
         similarities.sort(key=lambda x: x[1], reverse=True)
         return similarities[:limit]
     

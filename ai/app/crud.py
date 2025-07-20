@@ -42,12 +42,10 @@ def get_categories(db: Session, skip: int = 0, limit: int = 100) -> List[Categor
 def get_categories_count(db: Session) -> int:
     """Get total count of categories - FIXED VERSION"""
     try:
-        # Use a more explicit count query
         count = db.query(func.count(Category.id)).scalar()
         return count or 0
     except Exception as e:
         logger.error(f"Error getting categories count: {e}")
-        # Fallback to len() if count fails
         try:
             return len(db.query(Category).all())
         except Exception as fallback_error:
@@ -125,12 +123,10 @@ def get_or_create_category(db: Session, name: str, description: str = None,
                           embedding: List[float] = None) -> Tuple[Category, bool]:
     """Get existing category or create new one. Returns (category, created)"""
     try:
-        # Try to get existing category
         existing_category = get_category_by_name(db, name)
         if existing_category:
             return existing_category, False
         
-        # Create new category if it doesn't exist
         new_category = create_category(
             db=db, 
             name=name, 
@@ -168,11 +164,9 @@ def get_categories_without_embeddings(db: Session, limit: int = 100) -> List[Cat
         )
     ).limit(limit).all()
 
-# Add database health check function
 def check_database_health(db: Session) -> bool:
     """Check if database is accessible and tables exist"""
     try:
-        # Simple query to check if categories table exists and is accessible
         db.execute(text("SELECT 1 FROM categories LIMIT 1"))
         return True
     except Exception as e:

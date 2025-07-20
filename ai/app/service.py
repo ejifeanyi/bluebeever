@@ -13,10 +13,8 @@ import hashlib
 
 logger = logging.getLogger(__name__)
 
-# Initialize embedding cache
 embedding_cache = TTLCache(maxsize=settings.cache_size, ttl=settings.embedding_cache_ttl)
 
-# Import necessary types and classes
 from .schemas import CategorizationResponse, StandaloneEmailRequest
 from .vector_store import VectorStore
 from .thread_utils import ThreadUtils
@@ -49,13 +47,11 @@ class EmailCategorizationService:
         except Exception as e:
             logger.error(f"Failed to load model {model_name}: {e}")
             raise
-        # Precompute canonical embeddings
         self._precompute_canonical_embeddings()
 
     def _precompute_canonical_embeddings(self):
         self.canonical_embeddings = {}
         for cat in self.canonical_categories:
-            # Use the category name as the representative phrase
             emb = self.model.encode(cat, convert_to_tensor=False).tolist()
             self.canonical_embeddings[cat] = emb
         logger.info(f"Precomputed embeddings for canonicals: {list(self.canonical_embeddings.keys())}")
@@ -65,10 +61,8 @@ class EmailCategorizationService:
         if not content:
             return ""
         
-        # Remove HTML tags
         content = re.sub(r'<[^>]+>', ' ', content)
         
-        # Remove signatures
         signature_patterns = [
             r'\n--\s*\n.*$',
             r'\nSent from my.*$',
@@ -78,18 +72,15 @@ class EmailCategorizationService:
         for pattern in signature_patterns:
             content = re.sub(pattern, '', content, flags=re.DOTALL | re.IGNORECASE)
         
-        # Remove quoted replies
         lines = content.split('\n')
         clean_lines = [line for line in lines if not line.strip().startswith('>')]
         content = '\n'.join(clean_lines)
         
-        # Normalize whitespace
         content = re.sub(r'\s+', ' ', content).strip()
         return content
     
     def extract_meaningful_text(self, subject: str, body: str) -> str:
         """Extract meaningful text for categorization"""
-        # Truncate to reasonable lengths
         subject = (subject or "")[:settings.max_subject_chars]
         cleaned_body = self.clean_email_content(body)[:settings.max_body_chars]
         
@@ -102,7 +93,6 @@ class EmailCategorizationService:
         if not text or not text.strip():
             return [0.0] * self.embedding_dim
         
-        # Check cache first
         cache_key = f"emb_{hash(text.strip())}"
         cached = embedding_cache.get(cache_key)
         if cached:
@@ -112,7 +102,6 @@ class EmailCategorizationService:
             embedding = self.model.encode(text, convert_to_tensor=False)
             embedding_list = embedding.tolist()
             
-            # Cache the result
             embedding_cache[cache_key] = embedding_list
             return embedding_list
         except Exception as e:
@@ -125,7 +114,6 @@ class EmailCategorizationService:
         for canonical, keywords in self.canonical_categories.items():
             if any(keyword in text_lower for keyword in keywords):
                 return canonical
-        # Embedding fallback
         input_emb = self.model.encode(text, convert_to_tensor=False).tolist()
         best_cat = "general"
         best_sim = 0.0
@@ -139,7 +127,6 @@ class EmailCategorizationService:
             return best_cat
         return "general"
 
-    # Admin tools for canonical set
     @classmethod
     def list_canonicals(cls):
         return cls.canonical_categories.copy()
@@ -147,7 +134,6 @@ class EmailCategorizationService:
     @classmethod
     def add_canonical(cls, name: str, keywords: list):
         cls.canonical_categories[name] = keywords
-        # Recompute embedding if instance exists
         if hasattr(cls, 'canonical_embeddings'):
             instance = cls()
             instance._precompute_canonical_embeddings()
@@ -171,24 +157,21 @@ class EmailCategorizationService:
         try:
             email_id = request.email_id
             content_hash = hashlib.sha256((request.subject or "" + request.body or "").encode()).hexdigest()
-            # Check cache by email_id
             cached = queue_manager.get_cached_result(email_id)
             if cached:
                 logger.info(f"Cache hit for email_id {email_id}")
                 return CategorizationResponse(**cached)
-            # Check cache by content hash
             cached_hash = queue_manager.get_cached_result(content_hash)
             if cached_hash:
                 logger.info(f"Cache hit for content hash {content_hash}")
                 return CategorizationResponse(**cached_hash)
             
             meaningful_text = self.extract_meaningful_text(request.subject, request.body)
-            print(f"DEBUG: Meaningful text: '{meaningful_text}'")  # Debug logging
+            print(f"DEBUG: Meaningful text: '{meaningful_text}'") 
             
             email_embedding = self.generate_embedding(meaningful_text)
             print(f"DEBUG: Generated embedding with {len(email_embedding)} dimensions")
             
-            # Find similar categories
             vector_store = VectorStore(db)
             similar_categories = vector_store.find_similar_categories(
                 email_embedding, 
@@ -202,7 +185,6 @@ class EmailCategorizationService:
                 category, similarity = similar_categories[0]
                 print(f"DEBUG: Using existing category: {category.name} (similarity: {similarity:.3f})")
                 
-                # Update email count
                 from .crud import update_category_email_count
                 update_category_email_count(db, category.id, 1)
                 
@@ -210,34 +192,28 @@ class EmailCategorizationService:
                     request.email_id, request.user_id, category.name,
                     similarity, False, category.description
                 )
-                # Cache result by email_id and content hash
                 queue_manager.cache_result(email_id, response.dict())
                 queue_manager.cache_result(content_hash, response.dict())
                 return response
             else:
-                # THIS IS THE KEY FIX: Create new category when no matches found
                 print("DEBUG: No similar categories found, creating new category")
                 
                 category_name = self.generate_category_name(meaningful_text)
                 print(f"DEBUG: Generated category name: '{category_name}'")
                 
-                # IMPORTANT: Don't create "General" categories automatically
                 if category_name == "general":
-                    # Try to extract a better name from the content
                     category_name = self._extract_better_category_name(meaningful_text, request.subject)
                     print(f"DEBUG: Improved category name: '{category_name}'")
                 
                 response = self._create_new_category_response(
                     db, request, category_name, meaningful_text, email_embedding
                 )
-                # Cache result by email_id and content hash
                 queue_manager.cache_result(email_id, response.dict())
                 queue_manager.cache_result(content_hash, response.dict())
                 return response
             
         except Exception as e:
             logger.error(f"Error categorizing email {request.email_id}: {e}")
-            # Only fall back to General if there's an actual error
             return self._fallback_response(db, request)
 
     def categorize_threaded_email(self, db: Session, request) -> CategorizationResponse:
@@ -248,7 +224,6 @@ class EmailCategorizationService:
             print(f"DEBUG THREADED: Thread subject: {getattr(request, 'thread_subject', 'None')}")
             print(f"DEBUG THREADED: Current subject: {request.subject}")
             
-            # Check thread consistency first
             if hasattr(request, 'previous_category') and request.previous_category:
                 print(f"DEBUG THREADED: Checking previous category: {request.previous_category}")
                 
@@ -260,7 +235,6 @@ class EmailCategorizationService:
                     print(f"DEBUG THREADED: Has embedding: {previous_category.embedding_vector is not None}")
                     
                     if previous_category.embedding_vector:
-                        # Check if subjects match (thread continuation)
                         thread_subject = getattr(request, 'thread_subject', None)
                         is_continuation = ThreadUtils.is_thread_continuation(request.subject, thread_subject)
                         print(f"DEBUG THREADED: Is thread continuation: {is_continuation}")
@@ -282,14 +256,12 @@ class EmailCategorizationService:
                                 from .crud import update_category_email_count
                                 update_category_email_count(db, previous_category.id, 1)
                                 
-                                # Boost confidence for thread consistency
                                 boosted_confidence = min(0.95, similarity + getattr(settings, 'confidence_boost_for_threads', 0.1))
                                 
                                 response = self._create_response(
                                     request.email_id, request.user_id, previous_category.name,
                                     boosted_confidence, False, previous_category.description
                                 )
-                                # Cache result by email_id and content hash
                                 queue_manager.cache_result(request.email_id, response.dict())
                                 queue_manager.cache_result(hashlib.sha256((request.subject or "" + request.body or "").encode()).hexdigest(), response.dict())
                                 return response
@@ -304,7 +276,6 @@ class EmailCategorizationService:
             else:
                 print(f"DEBUG THREADED: No previous category provided, treating as standalone")
             
-            # Fall back to standalone categorization
             print(f"DEBUG THREADED: Falling back to standalone categorization")
             
             standalone_request = StandaloneEmailRequest(
@@ -354,7 +325,6 @@ class EmailCategorizationService:
     
     def _create_new_category_response(self, db: Session, request: StandaloneEmailRequest, category_name: str, meaningful_text: str, embedding: List[float]) -> CategorizationResponse:
         from .crud import get_category_by_name, create_category, update_category_email_count
-        # Always use canonical name
         canonical_name = category_name.lower().strip()
         existing = get_category_by_name(db, canonical_name)
         if existing:
@@ -389,5 +359,4 @@ class EmailCategorizationService:
             0.5, False, "General email category"
         )
 
-# Global service instance
 categorization_service = EmailCategorizationService()

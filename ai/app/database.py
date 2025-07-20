@@ -8,7 +8,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# SQLAlchemy setup with better error handling
 try:
     if "sqlite" in settings.database_url:
         engine = create_engine(
@@ -33,7 +32,6 @@ except Exception as e:
     logger.error(f"Failed to create database engine: {e}")
     raise
 
-# Supabase client (optional)
 supabase_client: Optional[Client] = None
 if settings.supabase_url and settings.supabase_key:
     try:
@@ -46,7 +44,6 @@ def get_db() -> Generator[Session, None, None]:
     """Database session dependency with better error handling"""
     db = SessionLocal()
     try:
-        # Test the connection
         db.execute(text("SELECT 1"))
         yield db
     except Exception as e:

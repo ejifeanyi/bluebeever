@@ -27,7 +27,6 @@ class EmbeddingCache:
     def set(self, key: str, embedding: List[float]) -> None:
         """Set embedding in cache"""
         with self._lock:
-            # Simple LRU eviction
             if len(self._cache) >= self.max_size:
                 oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
                 del self._cache[oldest_key]
@@ -39,7 +38,6 @@ class EmbeddingCache:
         with self._lock:
             self._cache.clear()
 
-# Global cache instance
 embedding_cache = EmbeddingCache(
     max_size=settings.cache_size, 
     ttl=settings.embedding_cache_ttl

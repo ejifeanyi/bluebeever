@@ -13,10 +13,8 @@ class ThreadUtils:
         if not subject:
             return ""
         
-        # Remove common prefixes
         subject = re.sub(r'^(Re:|RE:|Fwd:|FWD:|Fw:)\s*', '', subject, flags=re.IGNORECASE)
         
-        # Remove extra whitespace
         subject = re.sub(r'\s+', ' ', subject).strip()
         
         return subject.lower()
@@ -30,15 +28,12 @@ class ThreadUtils:
         normalized_current = ThreadUtils.normalize_subject(current_subject)
         normalized_thread = ThreadUtils.normalize_subject(thread_subject)
         
-        # Check if subjects match after normalization
         if normalized_current == normalized_thread:
             return True
         
-        # Check if current subject contains thread subject
         if normalized_thread in normalized_current:
             return True
         
-        # Check if thread subject contains current subject (original might be longer)
         if normalized_current in normalized_thread:
             return True
         
@@ -50,10 +45,8 @@ class ThreadUtils:
         if not subject:
             return message_id
         
-        # Use normalized subject as thread ID
         normalized = ThreadUtils.normalize_subject(subject)
         
-        # Create a simple hash-based thread ID
         import hashlib
         thread_id = hashlib.md5(normalized.encode()).hexdigest()[:16]
         
@@ -68,7 +61,6 @@ class TextUtils:
         if not text:
             return []
         
-        # Simple keyword extraction - remove stop words and get meaningful words
         stop_words = {
             'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
             'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
@@ -76,14 +68,11 @@ class TextUtils:
             'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must'
         }
         
-        # Extract words (4+ characters, alphanumeric)
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
         
-        # Filter out stop words
         keywords = [word for word in words if word not in stop_words]
         
-        # Get unique keywords and limit count
-        unique_keywords = list(dict.fromkeys(keywords))  # Preserve order
+        unique_keywords = list(dict.fromkeys(keywords))
         
         return unique_keywords[:max_keywords]
     
@@ -125,7 +114,6 @@ class EmailUtils:
         if not domain:
             return False
         
-        # Common personal email domains
         personal_domains = {
             'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
             'aol.com', 'icloud.com', 'protonmail.com'
@@ -142,7 +130,6 @@ class EmailUtils:
         try:
             local_part = email.split('@')[0]
             
-            # Handle common patterns
             if '.' in local_part:
                 parts = local_part.split('.')
                 return ' '.join(part.capitalize() for part in parts)
@@ -172,11 +159,9 @@ class ValidationUtils:
         if not name:
             return "General"
         
-        # Remove special characters and normalize
         sanitized = re.sub(r'[^\w\s&-]', '', name)
         sanitized = re.sub(r'\s+', ' ', sanitized).strip()
         
-        # Capitalize properly
         sanitized = ' '.join(word.capitalize() for word in sanitized.split())
         
-        return sanitized[:50]  # Limit length
+        return sanitized[:50]

@@ -45,12 +45,11 @@ class RabbitMQManager:
         self.result_queue = "category_results"
         self.result_cache_ttl = getattr(settings, 'result_cache_ttl', 7200)
         self.worker_prefetch_count = getattr(settings, 'worker_prefetch_count', 10)
-        # Metrics
         self.cache_hits = 0
         self.cache_misses = 0
         self.batches_processed = 0
         self.total_batch_size = 0
-        self._result_cache: Dict[str, Dict] = {}  # In-memory fallback for fast lookup
+        self._result_cache: Dict[str, Dict] = {}
         self._result_cache_expiry: Dict[str, float] = {}
         
     def connect(self):
@@ -60,7 +59,6 @@ class RabbitMQManager:
             )
             self.channel = self.connection.channel()
             
-            # Declare queue with durability
             self.channel.queue_declare(
                 queue=self.queue_name, 
                 durable=True
@@ -103,7 +101,6 @@ class RabbitMQManager:
                 )
             )
             
-            # Store task status
             self.task_results[task_id] = TaskResult(
                 task_id=task_id,
                 status=TaskStatus.QUEUED
@@ -149,22 +146,20 @@ class RabbitMQManager:
             try:
                 if not self.connection or self.connection.is_closed:
                     if not self.connect():
-                        time.sleep(5)  # Wait before retry
+                        time.sleep(5) 
                         continue
                 
-                # Set up consumer
-                self.channel.basic_qos(prefetch_count=self.worker_prefetch_count)  # Process one at a time
+                self.channel.basic_qos(prefetch_count=self.worker_prefetch_count)
                 self.channel.basic_consume(
                     queue=self.queue_name,
                     on_message_callback=self._process_message
                 )
                 
-                # Start consuming (blocks until connection closes)
                 self.channel.start_consuming()
                 
             except Exception as e:
                 logger.error(f"Worker error: {e}")
-                time.sleep(5)  # Wait before retry
+                time.sleep(5) 
     
     def _process_message(self, ch, method, properties, body):
         """Process a single message"""
@@ -175,15 +170,12 @@ class RabbitMQManager:
             
             logger.info(f"Processing task {task_id}")
             
-            # Update status
             if task_id in self.task_results:
                 self.task_results[task_id].status = TaskStatus.PROCESSING
             
-            # Process the task
             if self.processor_callback:
                 result = self.processor_callback(task_data, message.get("task_type", "email"))
                 
-                # Update with result
                 if task_id in self.task_results:
                     self.task_results[task_id].status = TaskStatus.COMPLETED
                     self.task_results[task_id].result = result
@@ -194,20 +186,17 @@ class RabbitMQManager:
                 logger.error("No processor callback set")
                 raise Exception("No processor callback")
             
-            # Acknowledge message
             ch.basic_ack(delivery_tag=method.delivery_tag)
             
         except Exception as e:
             logger.error(f"Failed to process message: {e}")
             
-            # Update task status
             task_id = json.loads(body.decode()).get("task_id")
             if task_id and task_id in self.task_results:
                 self.task_results[task_id].status = TaskStatus.FAILED
                 self.task_results[task_id].error = str(e)
                 self.task_results[task_id].completed_at = datetime.now()
             
-            # Reject message (won't be requeued)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     
     def get_queue_stats(self) -> Dict:
@@ -256,7 +245,6 @@ class RabbitMQManager:
         try:
             if not self.channel:
                 self.connect()
-            # Publish to result queue
             self.channel.queue_declare(queue=self.result_queue, durable=True, arguments={"x-message-ttl": self.result_cache_ttl * 1000})
             self.channel.basic_publish(
                 exchange='',
@@ -264,7 +252,6 @@ class RabbitMQManager:
                 body=json.dumps(message),
                 properties=pika.BasicProperties(delivery_mode=2)
             )
-            # In-memory fallback
             self._result_cache[key] = result
             self._result_cache_expiry[key] = time.time() + self.result_cache_ttl
             logger.info(f"Cached result for key {key}")
@@ -330,7 +317,6 @@ class RabbitMQManager:
             del self._result_cache[k]
             del self._result_cache_expiry[k]
 
-# Global queue manager instance
 queue_manager = RabbitMQManager()
 
 def initialize_queue(rabbitmq_url: str = None):
