@@ -120,7 +120,7 @@ def cleanup_unused_categories(db: Session, min_email_count: int = 1) -> int:
         return 0
 
 def get_or_create_category(db: Session, name: str, description: str = None, 
-                          embedding: List[float] = None) -> Tuple[Category, bool]:
+    embedding: List[float] = None) -> Tuple[Category, bool]:
     """Get existing category or create new one. Returns (category, created)"""
     try:
         existing_category = get_category_by_name(db, name)
