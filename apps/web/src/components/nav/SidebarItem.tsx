@@ -36,7 +36,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
         )}
         <span
           className={cn(
-            "font-medium transition-colors",
+            "font-medium transition-colors text-left text-sm",
             active
               ? "text-foreground"
               : "text-muted-foreground group-hover:text-foreground"

@@ -36,7 +36,7 @@ export class EmailQueryService {
       search,
       filters
     );
-    const cached = cacheService.get<PaginatedEmailsResult>(cacheKey);
+    const cached = await cacheService.get<PaginatedEmailsResult>(cacheKey);
 
     if (cached) return cached;
 
@@ -51,25 +51,17 @@ export class EmailQueryService {
       ];
     }
 
-    if (filters?.isRead !== undefined) {
-      where.isRead = filters.isRead;
-    }
-
+    if (filters?.isRead !== undefined) where.isRead = filters.isRead;
     if (filters?.dateFrom || filters?.dateTo) {
       where.date = {};
       if (filters.dateFrom) where.date.gte = filters.dateFrom;
       if (filters.dateTo) where.date.lte = filters.dateTo;
     }
+    if (filters?.labels?.length) where.labels = { hasSome: filters.labels };
+    if (filters?.category) where.category = filters.category;
 
-    if (filters?.labels?.length) {
-      where.labels = { hasSome: filters.labels };
-    }
+    const extendedLimit = Math.min(limit * 2, 100);
 
-    if (filters?.category) {
-      where.category = filters.category;
-    }
-
-    const extendedLimit = limit * 2;
     const [allEmails, total] = await Promise.all([
       prisma.email.findMany({
         where,
@@ -93,6 +85,7 @@ export class EmailQueryService {
           categoryDescription: true,
           categorizedAt: true,
           avatarUrl: true,
+          processingStatus: true,
         },
       }),
       prisma.email.count({ where }),
@@ -117,14 +110,13 @@ export class EmailQueryService {
       result.nextPageEmails = nextPageEmails;
     }
 
-    cacheService.set(cacheKey, result, 2 * 60 * 1000);
-
+    await cacheService.set(cacheKey, result, 2 * 60 * 1000);
     return result;
   }
 
-  static async getEmailById(userId: string, id: string) {
+  static async getEmailById(userId: string, id: string): Promise<any | null> {
     const cacheKey = cacheService.emailKey(userId, id);
-    const cached = cacheService.get(cacheKey);
+    const cached = await cacheService.get(cacheKey);
 
     if (cached) return cached;
 
@@ -133,7 +125,7 @@ export class EmailQueryService {
     });
 
     if (email) {
-      cacheService.set(cacheKey, email, 10 * 60 * 1000);
+      await cacheService.set(cacheKey, email, 10 * 60 * 1000);
     }
 
     return email;
@@ -146,20 +138,14 @@ export class EmailQueryService {
     });
 
     if (result.count > 0) {
-      cacheService.delete(cacheService.emailKey(userId, id));
-      cacheService.delete(cacheService.statsKey(userId));
+      await Promise.all([
+        cacheService.delete(cacheService.emailKey(userId, id)),
+        cacheService.delete(cacheService.statsKey(userId)),
+      ]);
 
       cacheService.invalidateUserCache(userId);
 
-      try {
-        const { getWebSocketService } = await import("./websocket.service");
-        const wsService = getWebSocketService();
-        if (wsService.isUserConnected(userId)) {
-          wsService.notifyEmailRead(userId, id);
-        }
-      } catch (error) {
-        console.log("WebSocket service not available:", error);
-      }
+      this.notifyEmailRead(userId, id);
     }
 
     return result;
@@ -167,16 +153,19 @@ export class EmailQueryService {
 
   static async getUserEmailStats(userId: string) {
     const cacheKey = cacheService.statsKey(userId);
-    const cached = cacheService.get(cacheKey);
+    const cached = await cacheService.get(cacheKey);
 
     if (cached) return cached;
 
-    const [total, unread, withAttachments, categorized, syncState] =
+    const [total, unread, withAttachments, categorized, processing, syncState] =
       await Promise.all([
         prisma.email.count({ where: { userId } }),
         prisma.email.count({ where: { userId, isRead: false } }),
         prisma.email.count({ where: { userId, hasAttachments: true } }),
         prisma.email.count({ where: { userId, category: { not: null } } }),
+        prisma.email.count({
+          where: { userId, processingStatus: "processing" },
+        }),
         prisma.syncState.findUnique({ where: { userId } }),
       ]);
 
@@ -186,77 +175,24 @@ export class EmailQueryService {
       withAttachments,
       categorized,
       uncategorized: total - categorized,
+      processing,
       lastSyncAt: syncState?.lastSyncAt,
       syncInProgress: syncState?.syncInProgress || false,
     };
 
-    cacheService.set(cacheKey, stats, 60 * 1000);
-
+    await cacheService.set(cacheKey, stats, 60 * 1000);
     return stats;
   }
 
-  static async getSyncStatus(userId: string) {
-    const cacheKey = cacheService.syncStatusKey(userId);
-    const cached = cacheService.get(cacheKey);
-
-    if (cached) return cached;
-
-    const syncState = await prisma.syncState.findUnique({
-      where: { userId },
-    });
-
-    if (!syncState) {
-      const status = {
-        syncInProgress: false,
-        isInitialSyncing: true,
-        lastSyncAt: null,
-        emailCount: 0,
-      };
-
-      cacheService.set(cacheKey, status, 30 * 1000); 
-      return status;
+  private static async notifyEmailRead(userId: string, emailId: string) {
+    try {
+      const { getWebSocketService } = await import("./websocket.service");
+      const wsService = getWebSocketService();
+      if (wsService.isUserConnected(userId)) {
+        wsService.notifyEmailRead(userId, emailId);
+      }
+    } catch (error) {
+      console.debug("WebSocket notification failed:", error);
     }
-
-    const emailCount = await prisma.email.count({ where: { userId } });
-
-    const status = {
-      syncInProgress: syncState.syncInProgress,
-      isInitialSyncing: syncState.isInitialSyncing,
-      lastSyncAt: syncState.lastSyncAt,
-      emailCount,
-    };
-
-    const ttl = syncState.syncInProgress ? 30 * 1000 : 5 * 60 * 1000;
-    cacheService.set(cacheKey, status, ttl);
-
-    return status;
-  }
-
-  static async getRecentEmails(userId: string, limit: number = 20) {
-    const cacheKey = cacheService.recentEmailsKey(userId, limit);
-    const cached = cacheService.get(cacheKey);
-
-    if (cached) return cached;
-
-    const emails = await prisma.email.findMany({
-      where: { userId },
-      orderBy: { date: "desc" },
-      take: limit,
-      select: {
-        id: true,
-        subject: true,
-        from: true,
-        snippet: true,
-        isRead: true,
-        date: true,
-        hasAttachments: true,
-        category: true,
-        avatarUrl: true,
-      },
-    });
-
-    cacheService.set(cacheKey, emails, 2 * 60 * 1000);
-
-    return emails;
   }
 }
