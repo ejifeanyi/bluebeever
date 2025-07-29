@@ -38,6 +38,7 @@ model Email {
   cc                  String[]
   bcc                 String[]
   body                String
+  bodyHtml            String?
   snippet             String
   isRead              Boolean   @default(false)
   date                DateTime
