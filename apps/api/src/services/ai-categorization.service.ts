@@ -35,10 +35,8 @@ export class AiCategorizationService {
     const emailId = email.id || email.messageId;
     const contentHash = crypto.createHash("sha256").update(email.subject + email.body + (email.snippet || "") + (email.from || "") + (email.to || []).join(",") + (email.date || "") + JSON.stringify(email.labels || [])).digest("hex");
 
-    // Check cache by emailId
     const cachedById = await cacheService.getCategoryResult(emailId);
     if (cachedById) return cachedById;
-    // Check deduplication by content hash
     const cachedByHash = await cacheService.getDeduplicationKey(contentHash);
     if (cachedByHash) return cachedByHash;
 
@@ -74,7 +72,6 @@ export class AiCategorizationService {
           result.category_description || "AI categorized email",
         is_new_category: result.is_new_category ?? false,
       };
-      // Store in cache by emailId and content hash
       await cacheService.setCategoryResult(emailId, categoryResult);
       await cacheService.setDeduplicationKey(contentHash, categoryResult);
       return categoryResult;
@@ -94,11 +91,9 @@ export class AiCategorizationService {
   ): Promise<BatchCategoryResult[]> {
     if (!emails.length) return [];
 
-    // Prepare hashes and ids
     const hashes = emails.map(email => crypto.createHash("sha256").update(email.subject + email.body + (email.snippet || "") + (email.from || "") + (email.to || []).join(",") + (email.date || "") + JSON.stringify(email.labels || [])).digest("hex"));
     const ids = emails.map(email => email.id || email.messageId);
 
-    // Check cache for all emails
     const cachedResults = await cacheService.getCategoryBatchResults(ids);
     const cachedHashes: Record<string, any> = {};
     for (let i = 0; i < hashes.length; ++i) {
@@ -107,7 +102,6 @@ export class AiCategorizationService {
         if (byHash) cachedHashes[ids[i]] = byHash;
       }
     }
-    // Collect all cached
     const allCached: BatchCategoryResult[] = [];
     for (let i = 0; i < emails.length; ++i) {
       const id = ids[i];
@@ -117,7 +111,6 @@ export class AiCategorizationService {
         allCached.push({ ...cachedHashes[id], email_id: id });
       }
     }
-    // Filter out emails that need categorization
     const uncachedEmails = emails.filter((_, i) => !cachedResults[ids[i]] && !cachedHashes[ids[i]]);
     if (!uncachedEmails.length) return allCached;
 
@@ -145,7 +138,6 @@ export class AiCategorizationService {
       }
 
       const result = (await response.json()) as BatchAiServiceResponse;
-      // Store results in cache
       const toCache: Record<string, any> = {};
       for (let i = 0; i < uncachedEmails.length; ++i) {
         const uncachedId = uncachedEmails[i].id || uncachedEmails[i].messageId;
@@ -161,7 +153,6 @@ export class AiCategorizationService {
         await cacheService.setDeduplicationKey(uncachedHash, categoryResult);
       }
       await cacheService.setCategoryBatchResults(toCache);
-      // Merge all results
       const batchResults: BatchCategoryResult[] = result.results.map((r, i) => ({
         email_id: uncachedEmails[i].id || uncachedEmails[i].messageId,
         assigned_category: r.assigned_category || "Other",
@@ -172,7 +163,6 @@ export class AiCategorizationService {
       return [...allCached, ...batchResults];
     } catch (error) {
       console.error("AI batch categorization failed:", error);
-      // Fallback to individual categorization for each email
       return emails.map((email) => ({
         email_id: email.id || email.messageId,
         assigned_category: this.fallbackCategory(email),

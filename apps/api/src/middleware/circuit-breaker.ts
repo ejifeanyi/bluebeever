@@ -84,14 +84,12 @@ export class CircuitBreakerMiddleware {
       const result = await operation();
       const duration = Date.now() - startTime;
 
-      // Record success
       this.recordSuccess(serviceName, finalConfig);
       healthMonitor.recordMetric(`${serviceName}_success`, 1, "count");
       healthMonitor.recordMetric(`${serviceName}_duration`, duration, "ms");
 
       return result;
     } catch (error) {
-      // Record failure
       this.recordFailure(serviceName, finalConfig);
       healthMonitor.recordMetric(`${serviceName}_failure`, 1, "count");
 
@@ -99,7 +97,6 @@ export class CircuitBreakerMiddleware {
     }
   }
 
-  // Get circuit state for monitoring
   getCircuitState(serviceName: string): CircuitBreakerState {
     return this.getCircuit(serviceName);
   }

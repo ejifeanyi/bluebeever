@@ -49,29 +49,23 @@ export class EmailProcessingService {
   static async processEmailBatch(jobs: EmailProcessingJob[]) {
     if (!jobs.length) return [];
     const emailIds = jobs.map(j => j.emailId);
-    // Fetch all emails in one query
     const emails = await withRetry(
       () => prisma.email.findMany({ where: { id: { in: emailIds } } }),
       RETRY_CONFIGS.database
     );
-    // Map for quick lookup
     const emailMap = new Map(emails.map(e => [e.id, e]));
-    // Prepare for batch categorization
     const toCategorize = emails.filter(e => !!e);
     const categoryResults = await withRetry(
       () => AiCategorizationService.categorizeEmailBatch(toCategorize),
       RETRY_CONFIGS.api
     );
-    // Map results by emailId
     const resultMap = new Map(categoryResults.map(r => [r.email_id, r]));
-    // Prepare batch updates
     const updatePromises = [];
     for (const job of jobs) {
       const email = emailMap.get(job.emailId);
       if (!email) continue;
       const categoryResult = resultMap.get(job.emailId);
       if (!categoryResult) continue;
-      // Enrichment
       const updates: any = {
         category: categoryResult.assigned_category,
         categoryConfidence: categoryResult.confidence_score,
@@ -99,7 +93,6 @@ export class EmailProcessingService {
       );
     }
     await Promise.all(updatePromises);
-    // Return results
     return jobs.map(job => {
       const categoryResult = resultMap.get(job.emailId);
       return {

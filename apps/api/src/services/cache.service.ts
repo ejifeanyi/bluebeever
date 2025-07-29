@@ -99,7 +99,6 @@ class CacheService {
     }
   }
 
-  // Categorization result cache keys
   categoryResultKey(emailId: string): string {
     return `category:result:${emailId}`;
   }
@@ -107,7 +106,6 @@ class CacheService {
     return `category:hash:${hash}`;
   }
 
-  // Single categorization result
   async getCategoryResult(emailId: string): Promise<any | null> {
     return this.get(this.categoryResultKey(emailId));
   }
@@ -115,7 +113,6 @@ class CacheService {
     return this.set(this.categoryResultKey(emailId), result, ttl);
   }
 
-  // Batch categorization results
   async getCategoryBatchResults(emailIds: string[]): Promise<Record<string, any>> {
     const results: Record<string, any> = {};
     for (const id of emailIds) {
@@ -128,7 +125,6 @@ class CacheService {
     await Promise.all(Object.entries(results).map(([id, res]) => this.setCategoryResult(id, res, ttl)));
   }
 
-  // Deduplication by content hash
   async getDeduplicationKey(hash: string): Promise<any | null> {
     return this.get(this.categoryContentHashKey(hash));
   }

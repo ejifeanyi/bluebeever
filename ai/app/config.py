@@ -21,16 +21,13 @@ class Settings(BaseSettings):
     worker_prefetch_count: int = 10
     max_retries: int = 3
     
-    # Fixed field name to match environment variable
     model_name: str = "paraphrase-MiniLM-L3-v2"
     model_cache_dir: Optional[str] = "./models"
     
     category_match_threshold: float = 0.7
     thread_consistency_threshold: float = 0.5
-    # Fixed field name to match environment variable
     confidence_boost: float = 0.2
     
-    # Fixed field name to match environment variable
     max_categories_check: int = 1000
     cache_size: int = 2000
     embedding_cache_ttl: int = 7200

@@ -11,7 +11,6 @@ async function flushBatch() {
   if (batch.length === 0) return;
   const jobsToProcess = batch.splice(0, BATCH_SIZE);
   if (jobsToProcess.length === 1) {
-    // Fallback to single processing
     await EmailProcessingService.processEmail(jobsToProcess[0]);
   } else {
     await EmailProcessingService.processEmailBatch(jobsToProcess);
