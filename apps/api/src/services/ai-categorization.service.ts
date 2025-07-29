@@ -33,10 +33,23 @@ interface BatchAiServiceResponse {
 export class AiCategorizationService {
   static async categorizeEmail(email: any): Promise<CategoryResult> {
     const emailId = email.id || email.messageId;
-    const contentHash = crypto.createHash("sha256").update(email.subject + email.body + (email.snippet || "") + (email.from || "") + (email.to || []).join(",") + (email.date || "") + JSON.stringify(email.labels || [])).digest("hex");
+    const cleanBody = this.cleanHtmlForAI(email.body);
+    const contentHash = crypto
+      .createHash("sha256")
+      .update(
+        email.subject +
+          cleanBody +
+          (email.snippet || "") +
+          (email.from || "") +
+          (email.to || []).join(",") +
+          (email.date || "") +
+          JSON.stringify(email.labels || [])
+      )
+      .digest("hex");
 
     const cachedById = await cacheService.getCategoryResult(emailId);
     if (cachedById) return cachedById;
+
     const cachedByHash = await cacheService.getDeduplicationKey(contentHash);
     if (cachedByHash) return cachedByHash;
 
@@ -50,7 +63,7 @@ export class AiCategorizationService {
             email_id: emailId,
             user_id: email.userId,
             subject: email.subject,
-            body: email.body,
+            body: cleanBody,
             snippet: email.snippet,
             sender_email: email.from,
             recipient_emails: email.to,
@@ -72,6 +85,7 @@ export class AiCategorizationService {
           result.category_description || "AI categorized email",
         is_new_category: result.is_new_category ?? false,
       };
+
       await cacheService.setCategoryResult(emailId, categoryResult);
       await cacheService.setDeduplicationKey(contentHash, categoryResult);
       return categoryResult;
@@ -91,17 +105,38 @@ export class AiCategorizationService {
   ): Promise<BatchCategoryResult[]> {
     if (!emails.length) return [];
 
-    const hashes = emails.map(email => crypto.createHash("sha256").update(email.subject + email.body + (email.snippet || "") + (email.from || "") + (email.to || []).join(",") + (email.date || "") + JSON.stringify(email.labels || [])).digest("hex"));
-    const ids = emails.map(email => email.id || email.messageId);
+    const processedEmails = emails.map((email) => ({
+      ...email,
+      cleanBody: this.cleanHtmlForAI(email.body),
+    }));
+
+    const hashes = processedEmails.map((email) =>
+      crypto
+        .createHash("sha256")
+        .update(
+          email.subject +
+            email.cleanBody +
+            (email.snippet || "") +
+            (email.from || "") +
+            (email.to || []).join(",") +
+            (email.date || "") +
+            JSON.stringify(email.labels || [])
+        )
+        .digest("hex")
+    );
+
+    const ids = emails.map((email) => email.id || email.messageId);
 
     const cachedResults = await cacheService.getCategoryBatchResults(ids);
     const cachedHashes: Record<string, any> = {};
+
     for (let i = 0; i < hashes.length; ++i) {
       if (!cachedResults[ids[i]]) {
         const byHash = await cacheService.getDeduplicationKey(hashes[i]);
         if (byHash) cachedHashes[ids[i]] = byHash;
       }
     }
+
     const allCached: BatchCategoryResult[] = [];
     for (let i = 0; i < emails.length; ++i) {
       const id = ids[i];
@@ -111,7 +146,11 @@ export class AiCategorizationService {
         allCached.push({ ...cachedHashes[id], email_id: id });
       }
     }
-    const uncachedEmails = emails.filter((_, i) => !cachedResults[ids[i]] && !cachedHashes[ids[i]]);
+
+    const uncachedEmails = processedEmails.filter(
+      (_, i) => !cachedResults[ids[i]] && !cachedHashes[ids[i]]
+    );
+
     if (!uncachedEmails.length) return allCached;
 
     try {
@@ -123,7 +162,7 @@ export class AiCategorizationService {
             email_id: email.id || email.messageId,
             user_id: email.userId,
             subject: email.subject,
-            body: email.body,
+            body: email.cleanBody,
             snippet: email.snippet,
             sender_email: email.from,
             recipient_emails: email.to,
@@ -139,27 +178,36 @@ export class AiCategorizationService {
 
       const result = (await response.json()) as BatchAiServiceResponse;
       const toCache: Record<string, any> = {};
+
       for (let i = 0; i < uncachedEmails.length; ++i) {
         const uncachedId = uncachedEmails[i].id || uncachedEmails[i].messageId;
-        const uncachedHash = hashes[emails.indexOf(uncachedEmails[i])];
+        const uncachedHash = hashes[processedEmails.indexOf(uncachedEmails[i])];
         const r = result.results[i];
         const categoryResult: CategoryResult = {
           assigned_category: r.assigned_category || "Other",
           confidence_score: r.confidence_score ?? 0.5,
-          category_description: r.category_description || "AI categorized email",
+          category_description:
+            r.category_description || "AI categorized email",
           is_new_category: r.is_new_category ?? false,
         };
+
         toCache[uncachedId] = categoryResult;
         await cacheService.setDeduplicationKey(uncachedHash, categoryResult);
       }
+
       await cacheService.setCategoryBatchResults(toCache);
-      const batchResults: BatchCategoryResult[] = result.results.map((r, i) => ({
-        email_id: uncachedEmails[i].id || uncachedEmails[i].messageId,
-        assigned_category: r.assigned_category || "Other",
-        confidence_score: r.confidence_score ?? 0.5,
-        category_description: r.category_description || "AI categorized email",
-        is_new_category: r.is_new_category ?? false,
-      }));
+
+      const batchResults: BatchCategoryResult[] = result.results.map(
+        (r, i) => ({
+          email_id: uncachedEmails[i].id || uncachedEmails[i].messageId,
+          assigned_category: r.assigned_category || "Other",
+          confidence_score: r.confidence_score ?? 0.5,
+          category_description:
+            r.category_description || "AI categorized email",
+          is_new_category: r.is_new_category ?? false,
+        })
+      );
+
       return [...allCached, ...batchResults];
     } catch (error) {
       console.error("AI batch categorization failed:", error);
@@ -219,6 +267,18 @@ export class AiCategorizationService {
         is_new_category: false,
       };
     }
+  }
+
+  private static cleanHtmlForAI(htmlBody: string): string {
+    if (!htmlBody) return "";
+
+    return htmlBody
+      .replace(/<style[^>]*>.*?<\/style>/gis, "")
+      .replace(/<script[^>]*>.*?<\/script>/gis, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&[^;]+;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   private static fallbackCategory(email: any): string {

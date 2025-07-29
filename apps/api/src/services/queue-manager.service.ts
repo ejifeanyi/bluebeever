@@ -2,8 +2,6 @@ import {
   allQueues,
   emailSyncQueue,
   emailProcessingQueue,
-  emailStorageQueue,
-  categorizationQueue,
 } from "../config/queue";
 
 interface QueueStats {

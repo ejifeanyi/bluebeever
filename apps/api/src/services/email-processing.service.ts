@@ -29,7 +29,7 @@ export class EmailProcessingService {
 
       await Promise.all([
         this.updateEmailWithCategory(emailId, categoryResult),
-        this.enrichEmailData(emailId, emailData),
+        this.enrichEmailData(emailId, emailData || {}),
         this.updateProcessingStatus(emailId, "processed"),
       ]);
 
@@ -48,24 +48,31 @@ export class EmailProcessingService {
 
   static async processEmailBatch(jobs: EmailProcessingJob[]) {
     if (!jobs.length) return [];
-    const emailIds = jobs.map(j => j.emailId);
+
+    const emailIds = jobs.map((j) => j.emailId);
     const emails = await withRetry(
       () => prisma.email.findMany({ where: { id: { in: emailIds } } }),
       RETRY_CONFIGS.database
     );
-    const emailMap = new Map(emails.map(e => [e.id, e]));
-    const toCategorize = emails.filter(e => !!e);
+
+    const emailMap = new Map(emails.map((e) => [e.id, e]));
+    const toCategorize = emails.filter((e) => !!e);
+
     const categoryResults = await withRetry(
       () => AiCategorizationService.categorizeEmailBatch(toCategorize),
       RETRY_CONFIGS.api
     );
-    const resultMap = new Map(categoryResults.map(r => [r.email_id, r]));
+
+    const resultMap = new Map(categoryResults.map((r) => [r.email_id, r]));
     const updatePromises = [];
+
     for (const job of jobs) {
       const email = emailMap.get(job.emailId);
       if (!email) continue;
+
       const categoryResult = resultMap.get(job.emailId);
       if (!categoryResult) continue;
+
       const updates: any = {
         category: categoryResult.assigned_category,
         categoryConfidence: categoryResult.confidence_score,
@@ -75,25 +82,28 @@ export class EmailProcessingService {
         processingStatus: "processed",
         processedAt: new Date(),
       };
-      if (this.isImportantEmail(job.emailData)) {
-        updates.labels = [...(job.emailData.labels || []), "IMPORTANT"];
+
+      const emailData = job.emailData || {};
+      if (this.isImportantEmail(emailData)) {
+        updates.labels = [...((emailData as any).labels || []), "IMPORTANT"];
       }
-      if (this.hasAttachments(job.emailData)) {
+
+      if (this.hasAttachments(emailData)) {
         updates.hasAttachments = true;
       }
+
       updatePromises.push(
         withRetry(
           () =>
-            prisma.email.update({
-              where: { id: job.emailId },
-              data: updates,
-            }),
+            prisma.email.update({ where: { id: job.emailId }, data: updates }),
           RETRY_CONFIGS.database
         )
       );
     }
+
     await Promise.all(updatePromises);
-    return jobs.map(job => {
+
+    return jobs.map((job) => {
       const categoryResult = resultMap.get(job.emailId);
       return {
         success: !!categoryResult,
@@ -122,7 +132,7 @@ export class EmailProcessingService {
       emails: threadEmails.map((e) => ({
         email_id: e.id,
         subject: e.subject,
-        body: e.body,
+        body: this.cleanHtmlForAI(e.body),
         snippet: e.snippet,
         sender_email: e.from,
         timestamp: e.date,
@@ -142,7 +152,7 @@ export class EmailProcessingService {
     );
 
     await Promise.all([
-      this.enrichEmailData(email.id, { labels: email.labels }),
+      this.enrichEmailData(email.id, { labels: email.labels || [] }),
       this.updateProcessingStatus(email.id, "processed"),
     ]);
 
@@ -178,7 +188,7 @@ export class EmailProcessingService {
     const updates: any = {};
 
     if (this.isImportantEmail(emailData)) {
-      updates.labels = [...(emailData.labels || []), "IMPORTANT"];
+      updates.labels = [...((emailData as any).labels || []), "IMPORTANT"];
     }
 
     if (this.hasAttachments(emailData)) {
@@ -188,11 +198,7 @@ export class EmailProcessingService {
     if (Object.keys(updates).length === 0) return;
 
     await withRetry(
-      () =>
-        prisma.email.update({
-          where: { id: emailId },
-          data: updates,
-        }),
+      () => prisma.email.update({ where: { id: emailId }, data: updates }),
       RETRY_CONFIGS.database
     );
   }
@@ -219,5 +225,17 @@ export class EmailProcessingService {
 
   private static hasAttachments(emailData: any): boolean {
     return emailData.attachments?.length > 0;
+  }
+
+  private static cleanHtmlForAI(htmlBody: string): string {
+    if (!htmlBody) return "";
+
+    return htmlBody
+      .replace(/<style[^>]*>.*?<\/style>/gis, "")
+      .replace(/<script[^>]*>.*?<\/script>/gis, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&[^;]+;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 }
